@@ -87,7 +87,7 @@ Veto any of them.
   every snapshot from the last 30 days plus the most recent 50, prune older ones.
 - Autosave: save 1.5 seconds after the last edit, and also on tab blur or close.
 - Board id: a short slug generated from the name, editable, must be unique.
-- Region: pick the Supabase and Vercel region closest to Jan.
+- Region: pick the Supabase and Vercel region nearest you. It does not affect the build or how the app works.
 
 ## 4. Architecture overview
 - A single Next.js app holds both the frontend and the API route handlers, deployed on
@@ -222,8 +222,11 @@ Share links are built from the browser origin at click time (section C), so ther
   instead of raw HTTP. Not required for the build.
 
 ## 12. Build order (implementation runbook)
-1. Scaffold with create-next-app (TypeScript, App Router, Tailwind). Commit.
-2. Add dependencies: `@excalidraw/excalidraw`, `@supabase/supabase-js`, a cookie or JWT lib.
+1. Scaffold the Next.js app. This folder is not empty (it already has `PLAN.md`, `.git`, and `.gitignore`), and create-next-app refuses a non-empty directory, so scaffold into a temp folder and move the files in. From `C:\Users\jan\Documents\jandraw`:
+   - Run: `npx create-next-app@latest jandraw-tmp --ts --app --tailwind --eslint --no-src-dir --import-alias "@/*" --use-npm --yes`
+   - Move the generated contents up into this folder, keeping the existing `PLAN.md`, `.git`, and the committed `.gitignore` (it already covers `.next`, `.env*`, and `.vercel`). Do not overwrite our files. Then delete `jandraw-tmp`.
+   - Commit the scaffold.
+2. Add dependencies: `@excalidraw/excalidraw` and `@supabase/supabase-js`. No auth library is needed: the session cookie is a hand-built HMAC using Node's built-in `crypto` (`createHmac`, `timingSafeEqual`) plus Next's `cookies()` helper (see section B). If `npm install @excalidraw/excalidraw` reports a peer-dependency error against the React or Next major that create-next-app pulled, retry with `--legacy-peer-deps`, or pin Excalidraw to its current stable release and the React major it expects.
 3. Supabase: create the fresh project, run the schema SQL for `boards` and `board_snapshots`,
    create the `board-images` bucket, and collect the URL and service-role key.
 4. Server lib: a Supabase server client, plus auth helpers (verify secret, sign and verify the
