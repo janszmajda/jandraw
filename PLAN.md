@@ -23,6 +23,11 @@ Jan actually uses.
   identical format, files round-trip cleanly with real excalidraw.com both ways.
 - Hosting: Vercel free tier on a `.vercel.app` URL to start. Supabase free tier.
 - Separation: its own git repo and its own fresh Supabase, fully apart from Jericho.
+- View links: each board gets a random, unguessable share token (e.g. /v/8f3k2a9), so a
+  public board cannot be found by guessing names.
+- Dashboard: a flat list sorted by most recently edited, with a search box.
+- Session: stay logged in about 30 days before the passphrase is needed again.
+- Theme: the editor and view pages follow the device light or dark setting.
 
 ## 3. Defaulted decisions (confirm or change)
 These were not asked about. Sensible defaults are chosen so the build is unblocked.
@@ -55,6 +60,7 @@ Table `boards`:
 - `app_state` jsonb not null default '{}'      (background color and similar)
 - `files` jsonb not null default '{}'          (image references and mime, not bytes)
 - `is_public` boolean not null default true    (shareable by default)
+- `share_token` text not null unique            (random token used in the /v view link)
 - `is_deleted` boolean not null default false  (soft delete / Trash)
 - `scene_version` bigint not null default 0    (bumped on each save)
 - `created_at` timestamptz not null default now()
@@ -81,8 +87,8 @@ to an unauthenticated caller only if `is_public` and not deleted), not via anon 
 ## 6. Auth model
 - One secret, `JANDRAW_EDIT_SECRET`, set as an env var.
 - Login: a `/login` page takes the passphrase. The server compares it to the secret and,
-  on success, sets a signed, httpOnly, secure session cookie. That cookie gates every
-  edit page and every write API.
+  on success, sets a signed, httpOnly, secure session cookie that lasts about 30 days.
+  That cookie gates every edit page and every write API.
 - API writes accept either the session cookie (browser) or an
   `Authorization: Bearer <secret>` header (for Claude and any scripts).
 - Reads: GET of a public board needs no auth. GET of a private board needs the cookie or
@@ -99,6 +105,11 @@ Boards:
                                   Writes a snapshot of the prior state, bumps scene_version. (auth)
 - `PATCH  /api/boards/[id]`       metadata only {name?, is_public?, is_deleted?} (auth).
 - `DELETE /api/boards/[id]`       soft delete. `?hard=1` permanently deletes (auth).
+
+Sharing:
+- `GET  /api/view/[token]`        full board by its share token. Returned only if the board
+                                  is public and not deleted. No auth.
+- `POST /api/boards/[id]/rotate-token`   issue a fresh share token, killing old links (auth).
 
 Granular element ops (auth), the surgical edit API for Claude:
 - `POST   /api/boards/[id]/elements`   add: {elements:[...]} append or insert, fixes z-order index.
@@ -126,20 +137,23 @@ Images:
 
 ## 8. Pages (Next.js App Router)
 - `/login`        passphrase form, sets the session cookie.
-- `/` dashboard   (auth) lists boards with name, last updated, a public badge, a copy-view-link
-                  button, open, rename, and delete. A New board button. A Trash view of deleted
-                  boards with restore.
+- `/` dashboard   (auth) a flat list sorted by most recently edited, with a search box. Each
+                  row shows name, last updated, a public badge, a copy-view-link button (copies
+                  the /v token link), open, rename, and delete. A New board button. A Trash view
+                  of deleted boards with restore.
 - `/edit/[id]`    (auth) the full Excalidraw editor. Loads the board, autosaves on a debounce.
                   Top bar: editable name, public toggle with copy-view-link, export `.excalidraw`,
                   import to replace, and a history drawer to view and restore snapshots.
-- `/view/[id]`    public if the board is public. Excalidraw in read-only view mode. No autosave.
-                  Clean message if the board is private or missing.
+- `/v/[token]`    the public view link. Resolves a board by its share token and shows it in
+                  read-only view mode if the board is public. No autosave. Clean message if the
+                  board is private or missing.
 
 ## 9. Excalidraw integration notes
 - Render `<Excalidraw>` with `initialData = {elements, appState, files}`. Read changes via
   `onChange` (debounced) and persist them. Use the `excalidrawAPI` ref for imperative calls
   (updateScene, addFiles, getSceneElements, getAppState, getFiles).
 - Read-only view uses `viewModeEnabled`.
+- Set the Excalidraw `theme` to match the device using the prefers-color-scheme setting.
 - File import uses `loadFromBlob` to parse an uploaded `.excalidraw`. File export uses
   `serializeAsJSON` then a download. Same format means real excalidraw.com opens the file and
   vice versa.
@@ -183,8 +197,8 @@ Set locally in `.env.local` and in Vercel project settings. `.env*` is gitignore
   exists and restores correctly.
 - Paste an image, reload, the image still renders, and the board row stays small because the
   bytes live in Storage.
-- Toggle a board public and open its `/view` link in a logged-out browser: read-only and visible.
-  A private board's view link is blocked.
+- Toggle a board public and open its `/v` token link in a logged-out browser: read-only and
+  visible. Turning the board private blocks that link. Rotating the token kills the old link.
 - Export a board to `.excalidraw`, open it on excalidraw.com successfully, then import that same
   file back into Jandraw.
 - Claude calls the API with the bearer secret: reads a board, adds an element, updates one, and
