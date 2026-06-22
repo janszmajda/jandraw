@@ -63,6 +63,7 @@ export default function Editor({ boardId }: { boardId: string }) {
   const savingRef = useRef(false);
   const pendingRef = useRef(false);
   const readyRef = useRef(false);
+  const baselineSetRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ---- Load the board scene once ----
@@ -137,6 +138,15 @@ export default function Editor({ boardId }: { boardId: string }) {
     ) => {
       if (!readyRef.current) return;
       const sig = computeSig(elements, appState, files);
+      // Excalidraw fires onChange on mount with its normalized scene (grid/defaults
+      // filled in) which differs from the stored scene. Adopt that first emission as
+      // the saved baseline so merely OPENING a board never triggers a save/snapshot;
+      // only genuine edits after mount differ from the baseline.
+      if (!baselineSetRef.current) {
+        baselineSetRef.current = true;
+        lastSavedSigRef.current = sig;
+        return;
+      }
       if (sig === lastSavedSigRef.current) return; // view-only churn → no save
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => void doSave(), 1500);
@@ -271,9 +281,15 @@ export default function Editor({ boardId }: { boardId: string }) {
       const { board } = await res.json();
       const api = apiRef.current;
       if (api) {
-        lastSavedSigRef.current = computeSig(board.elements, board.app_state, board.files);
         api.updateScene({ elements: board.elements, appState: board.app_state });
         api.addFiles(Object.values(board.files ?? {}));
+        // Baseline = the actual normalized scene now on the canvas, so the onChange
+        // triggered by updateScene doesn't re-save the just-restored (already-persisted) state.
+        lastSavedSigRef.current = computeSig(
+          api.getSceneElements(),
+          api.getAppState(),
+          api.getFiles(),
+        );
       }
       setSaveStatus("saved");
       setShowHistory(false);
