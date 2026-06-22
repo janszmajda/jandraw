@@ -3,6 +3,7 @@ import { handle } from "@/lib/http";
 import { requireAuth } from "@/lib/auth";
 import { fetchActiveBoardRow } from "@/lib/boards";
 import { rehydrateImages } from "@/lib/images";
+import { sanitizeAppState } from "@/lib/appState";
 
 type Ctx = { params: Promise<{ id: string }> };
 
@@ -20,7 +21,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
       version: 2,
       source: "jandraw",
       elements: Array.isArray(row.elements) ? row.elements : [],
-      appState: row.app_state && typeof row.app_state === "object" ? row.app_state : {},
+      appState: sanitizeAppState(row.app_state as Record<string, unknown>),
       files: await rehydrateImages(row.id, row.files ?? {}),
     };
 

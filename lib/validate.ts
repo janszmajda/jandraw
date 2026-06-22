@@ -14,10 +14,11 @@ export function validateName(name: unknown): string {
   if (typeof name !== "string" || name.trim().length === 0) {
     badRequest("name is required and must be a non-empty string.");
   }
-  if (name.length > 200) {
+  const trimmed = name.trim();
+  if (trimmed.length > 200) {
     badRequest("name must be at most 200 characters.");
   }
-  return name;
+  return trimmed; // store the trimmed form; length is checked after trimming
 }
 
 export function expectArray(v: unknown, field: string): unknown[] {

@@ -17,15 +17,28 @@ type Status = "loading" | "ready" | "notfound" | "error";
 type SaveStatus = "idle" | "saving" | "saved" | "failed";
 type Snapshot = { id: string; scene_version: number; created_at: string };
 
-// Element + file signature used to skip pure view churn (selection / scroll / zoom)
-// so app_state-only changes never trigger a PUT (and never flood board_snapshots).
-function computeSig(elements: readonly { id?: string; version?: number; isDeleted?: boolean }[], files: Record<string, unknown> | undefined): string {
+// Persisted app_state keys that change only by deliberate user action (a canvas
+// background or grid change), never by selection / scroll / zoom / tool churn.
+// Folding just these into the save signature makes those changes save, while pure
+// view churn (which never touches them) is still skipped — so board_snapshots
+// isn't flooded by transient app_state keys (activeTool, openMenu, selection, …).
+const SAVABLE_APPSTATE_KEYS = ["viewBackgroundColor", "gridModeEnabled", "gridSize", "gridStep"];
+
+// Signature used to skip no-op saves: elements (id:version), the file-id set, and
+// the savable app_state keys above.
+function computeSig(
+  elements: readonly { id?: string; version?: number; isDeleted?: boolean }[],
+  appState: Record<string, unknown> | null | undefined,
+  files: Record<string, unknown> | undefined,
+): string {
   const eSig = (elements ?? [])
     .filter((e) => !e.isDeleted)
     .map((e) => `${e.id}:${e.version ?? 0}`)
     .join(",");
   const fSig = Object.keys(files ?? {}).sort().join(",");
-  return `${eSig}||${fSig}`;
+  const a = (appState ?? {}) as Record<string, unknown>;
+  const aSig = SAVABLE_APPSTATE_KEYS.map((k) => `${k}:${JSON.stringify(a[k])}`).join(",");
+  return `${eSig}||${fSig}||${aSig}`;
 }
 
 export default function Editor({ boardId }: { boardId: string }) {
@@ -70,7 +83,7 @@ export default function Editor({ boardId }: { boardId: string }) {
           appState: board.app_state,
           files: board.files,
         });
-        lastSavedSigRef.current = computeSig(board.elements, board.files);
+        lastSavedSigRef.current = computeSig(board.elements, board.app_state, board.files);
         readyRef.current = true;
         setStatus("ready");
       })
@@ -96,7 +109,7 @@ export default function Editor({ boardId }: { boardId: string }) {
       const elements = api.getSceneElements();
       const appState = api.getAppState();
       const files = api.getFiles();
-      const sig = computeSig(elements, files);
+      const sig = computeSig(elements, appState, files);
       const res = await fetch(`/api/boards/${boardId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -117,9 +130,13 @@ export default function Editor({ boardId }: { boardId: string }) {
   }, [boardId]);
 
   const onChange = useCallback(
-    (elements: readonly { id?: string; version?: number; isDeleted?: boolean }[], _appState: unknown, files: Record<string, unknown>) => {
+    (
+      elements: readonly { id?: string; version?: number; isDeleted?: boolean }[],
+      appState: Record<string, unknown>,
+      files: Record<string, unknown>,
+    ) => {
       if (!readyRef.current) return;
-      const sig = computeSig(elements, files);
+      const sig = computeSig(elements, appState, files);
       if (sig === lastSavedSigRef.current) return; // view-only churn → no save
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => void doSave(), 1500);
@@ -134,10 +151,11 @@ export default function Editor({ boardId }: { boardId: string }) {
       const api = apiRef.current;
       if (!api) return;
       const elements = api.getSceneElements();
+      const appState = api.getAppState();
       const files = api.getFiles();
-      const sig = computeSig(elements, files);
+      const sig = computeSig(elements, appState, files);
       if (sig === lastSavedSigRef.current) return;
-      const body = JSON.stringify({ elements, app_state: api.getAppState(), files });
+      const body = JSON.stringify({ elements, app_state: appState, files });
       fetch(`/api/boards/${boardId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
@@ -253,7 +271,7 @@ export default function Editor({ boardId }: { boardId: string }) {
       const { board } = await res.json();
       const api = apiRef.current;
       if (api) {
-        lastSavedSigRef.current = computeSig(board.elements, board.files);
+        lastSavedSigRef.current = computeSig(board.elements, board.app_state, board.files);
         api.updateScene({ elements: board.elements, appState: board.app_state });
         api.addFiles(Object.values(board.files ?? {}));
       }

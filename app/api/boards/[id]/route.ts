@@ -49,7 +49,7 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
     const elements = expectArray(body.elements, "elements");
     const appState = expectObject(body.app_state, "app_state");
     const files = expectObject(body.files, "files");
-    if (body.name !== undefined) validateName(body.name);
+    const cleanName = body.name !== undefined ? validateName(body.name) : undefined;
     if (body.is_public !== undefined) expectBoolean(body.is_public, "is_public");
 
     const row = await fetchActiveBoardRow(id);
@@ -58,7 +58,7 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
     // name / is_public, if supplied, are updated in the same request (metadata-only,
     // does not affect the snapshot which captures the prior scene fields).
     const meta: Record<string, unknown> = {};
-    if (body.name !== undefined) meta.name = body.name;
+    if (cleanName !== undefined) meta.name = cleanName;
     if (body.is_public !== undefined) meta.is_public = body.is_public;
     if (Object.keys(meta).length > 0) {
       const { error } = await supabase.from("boards").update(meta).eq("id", id);
