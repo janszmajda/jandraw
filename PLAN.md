@@ -1,5 +1,51 @@
 # Jandraw build plan
 
+## 0. Before you start (setup checklist)
+
+Read this first. It lists what is already in place and what you must set up before the build can run end to end.
+
+Already installed on this machine (verified):
+- Node.js v24 and npm 11.
+- git 2.53.
+- This repo, at `C:\Users\jan\Documents\jandraw`, with this plan committed.
+- The two boards to import, backed up at `C:\Users\jan\Documents\excalidraw-backup`.
+
+You still need to set up:
+
+1. A Supabase project, fresh and separate from any Jericho work.
+   - Create a new project at supabase.com.
+   - In Project Settings, API, copy two values: the Project URL and the service_role key.
+   - Run the SQL in section A (A.1 through A.10) in the Supabase SQL editor.
+   - Create the private Storage bucket named `board-images` (A.5 has the SQL, or make it in the dashboard with Public off).
+
+2. A Vercel account. Only needed to deploy, local dev runs without it.
+   - Sign up at vercel.com.
+   - At deploy time, either connect a GitHub repo or run the `vercel` CLI from this folder.
+   - Set the environment variables (below) in the Vercel project settings.
+
+3. Pick a passphrase. This one secret is how you log in to edit, it also signs the session cookie, and it is the value the Authorization Bearer API check compares against. Choose something long and random.
+
+Environment variables (put them in `.env.local` for local dev, and in Vercel for the deploy):
+- `SUPABASE_URL`: the Supabase Project URL.
+- `SUPABASE_SERVICE_ROLE_KEY`: the Supabase service_role key. Server side only, never shipped to the browser.
+- `JANDRAW_EDIT_SECRET`: your chosen passphrase.
+
+That is the whole list. There is no separate cookie secret (the cookie is signed with `JANDRAW_EDIT_SECRET`, see section B), and no base URL variable (share links are built from the browser origin at click time, see section C). Supabase is only ever called from the server with the service role, so there is no public Supabase key and no `NEXT_PUBLIC_` Supabase variable.
+
+Optional, can come later:
+- A GitHub repo, if you want Vercel to deploy on push instead of using the `vercel` CLI.
+- A custom domain. The plan starts on the free `.vercel.app` URL.
+- The Supabase CLI, if you prefer running the schema from the command line instead of the SQL editor.
+
+Order of operations for the one-shot build:
+1. Scaffold the Next.js app in this folder.
+2. Create the Supabase project, run section A SQL, create the bucket.
+3. Put the three env vars in `.env.local`.
+4. Build the route handlers and pages from sections B and C.
+5. Import the two backup boards (build step 8 in section 12).
+6. Test locally against the acceptance tests (section 13).
+7. Deploy to Vercel and set the same three env vars there.
+
 ## 1. What this is
 Jandraw is a self-hosted, personal version of Excalidraw that Jan owns and deploys.
 He can open it on any device, edit his boards, and share read-only links with friends
@@ -161,12 +207,11 @@ Images:
   loaded with `next/dynamic` and `ssr: false`.
 
 ## 10. Environment variables
-- `NEXT_PUBLIC_SUPABASE_URL`        Supabase project URL.
-- `SUPABASE_SERVICE_ROLE_KEY`       server only, secret.
-- `JANDRAW_EDIT_SECRET`             the edit passphrase, server only.
-- `JANDRAW_COOKIE_SECRET`           signs the session cookie.
-- `NEXT_PUBLIC_BASE_URL`            used to build shareable view links.
-Set locally in `.env.local` and in Vercel project settings. `.env*` is gitignored.
+Three variables, all server side. See section 0 for where to get each.
+- `SUPABASE_URL`                the Supabase project URL. Access is service-role only, so there is no NEXT_PUBLIC Supabase variable.
+- `SUPABASE_SERVICE_ROLE_KEY`   the Supabase service_role key. Server only, secret.
+- `JANDRAW_EDIT_SECRET`         the edit passphrase. Also the HMAC key that signs the session cookie (section B), and the value the Authorization Bearer check compares against. No separate cookie secret is needed.
+Share links are built from the browser origin at click time (section C), so there is no base URL variable. Set the three locally in `.env.local` and in Vercel project settings. `.env*` is gitignored.
 
 ## 11. How Claude edits boards
 - Claude calls the HTTP API directly with the bearer secret: GET to read, the granular
