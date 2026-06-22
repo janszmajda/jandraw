@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "jandraw": {
+      "command": "node",
+      "args": ["mcp/server.mjs"],
+      "env": {
+        "JANDRAW_API_URL": "http://localhost:3000"
+      }
+    }
+  }
+}
