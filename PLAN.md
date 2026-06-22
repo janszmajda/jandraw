@@ -1,9 +1,10 @@
-# Personal Excalidraw — Build Plan
+# Jandraw build plan
 
 ## What this is
-A self-hosted, personal version of Excalidraw that I own and deploy myself. I can
-open it on any device, edit my boards, and share read-only links with friends so
-they can view my presentations. Claude can edit my boards for me through a small API.
+Jandraw is a self-hosted, personal version of Excalidraw that I own and deploy
+myself. I can open it on any device, edit my boards, and share read-only links with
+friends so they can view my presentations. Claude can edit my boards for me through
+a small API.
 
 ## Why
 Excalidraw+ (the paid cloud) starts charging after the trial, and its API is a
@@ -58,7 +59,8 @@ A board is just the `.excalidraw` JSON. To edit, Claude either:
 No encryption is in the way, so this is straightforward.
 
 ## Decisions locked
-- Lives in `C:\Users\jan\Documents\excalidraw-self`.
+- Name: Jandraw.
+- Lives in `C:\Users\jan\Documents\jandraw`.
 - Its own git repo, separate from anything Jericho.
 - Its own fresh Supabase project, separate from `synth-task-pipeline`.
 - No real-time collaboration.
@@ -87,6 +89,6 @@ These get loaded into the new store once the app is running.
 - Pick a write-token secret, or let the build generate one.
 
 ## Open questions (answer whenever)
-- App/folder name: currently `excalidraw-self`. Rename if you want.
+- Name is set: Jandraw.
 - Custom domain later, or just the `.vercel.app` URL to start?
 - Should view links be public by default, or off until I flip a board to public?
