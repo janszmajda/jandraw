@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import dynamic from "next/dynamic";
-import { usePrefersTheme } from "../../_lib/usePrefersTheme";
+import { useTheme } from "../../_lib/useTheme";
 import { relativeTime, viewLink } from "../../_lib/format";
 
 const ExcalidrawCanvas = dynamic(() => import("../../_components/ExcalidrawCanvas"), {
@@ -42,7 +42,7 @@ function computeSig(
 }
 
 export default function Editor({ boardId }: { boardId: string }) {
-  const theme = usePrefersTheme();
+  const { theme } = useTheme();
   const [status, setStatus] = useState<Status>("loading");
   const [initialData, setInitialData] = useState<unknown>(null);
   const [name, setName] = useState("");

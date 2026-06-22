@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { relativeTime, viewLink } from "../_lib/format";
+import { useTheme } from "../_lib/useTheme";
 
 type BoardSummary = {
   id: string;
@@ -17,6 +18,7 @@ type BoardSummary = {
 
 export default function Dashboard() {
   const router = useRouter();
+  const { theme, toggle } = useTheme();
   const [boards, setBoards] = useState<BoardSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -149,6 +151,14 @@ export default function Dashboard() {
           placeholder="Search boards…"
           className="ml-auto w-56 rounded-lg border border-black/15 bg-transparent px-3 py-1.5 text-sm outline-none focus:border-blue-500 dark:border-white/20"
         />
+        <button
+          onClick={toggle}
+          aria-label="Toggle dark mode"
+          title="Toggle dark mode"
+          className="rounded-lg border border-black/15 px-3 py-1.5 text-sm transition hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
+        >
+          {theme === "dark" ? "☀ Light" : "🌙 Dark"}
+        </button>
         <button
           onClick={newBoard}
           disabled={creating}

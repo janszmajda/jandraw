@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
-import { usePrefersTheme } from "../../_lib/usePrefersTheme";
+import { useTheme } from "../../_lib/useTheme";
 
 const ExcalidrawCanvas = dynamic(() => import("../../_components/ExcalidrawCanvas"), {
   ssr: false,
@@ -30,7 +30,7 @@ function Centered({ children }: { children: React.ReactNode }) {
 export default function Viewer({ token }: { token: string }) {
   const [state, setState] = useState<State>("loading");
   const [board, setBoard] = useState<ViewBoard | null>(null);
-  const theme = usePrefersTheme();
+  const { theme } = useTheme();
 
   const load = () => {
     setState("loading");
