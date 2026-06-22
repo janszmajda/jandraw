@@ -5,6 +5,11 @@ node_modules/
 .next/
 out/
 dist/
+/build
+
+# next.js / typescript generated
+next-env.d.ts
+*.tsbuildinfo
 
 # env / secrets
 .env
