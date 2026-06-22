@@ -299,7 +299,7 @@ export default function Editor({ boardId }: { boardId: string }) {
     "rounded-md px-2 py-1 text-sm transition border border-black/10 hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10";
 
   return (
-    <div className="flex min-h-full flex-1 flex-col">
+    <div className="flex h-screen flex-col">
       {/* Top bar */}
       <header className="flex flex-wrap items-center gap-2 border-b border-black/10 px-3 py-2 dark:border-white/10">
         <Link href="/" className="text-sm opacity-70 hover:opacity-100">
@@ -376,7 +376,7 @@ export default function Editor({ boardId }: { boardId: string }) {
       </header>
 
       {/* Canvas + history drawer */}
-      <div className="relative flex-1">
+      <div className="relative flex-1 min-h-0">
         {initialData != null && (
           <ExcalidrawCanvas
             theme={theme}

@@ -72,12 +72,12 @@ export default function Viewer({ token }: { token: string }) {
     );
 
   return (
-    <div className="flex min-h-full flex-1 flex-col">
+    <div className="flex h-screen flex-col">
       <header className="flex items-center justify-between border-b border-black/10 px-4 py-2 dark:border-white/10">
         <span className="truncate font-medium">{board?.name}</span>
         <span className="text-xs opacity-60">read only view</span>
       </header>
-      <div className="relative flex-1">
+      <div className="relative flex-1 min-h-0">
         <ExcalidrawCanvas
           viewModeEnabled
           theme={theme}
