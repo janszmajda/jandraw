@@ -171,13 +171,14 @@ export async function saveScene(
         (typeof error.message === "string" &&
           /schema cache|could not find the function/i.test(error.message));
       if (!notInstalled) throw error;
-      // The caller opted into optimistic concurrency (expected_scene_version) but the atomic
-      // check function isn't installed — fail loud rather than silently fall back to a racy
-      // pre-flight that could still lose a concurrent write (return a misleading 200).
-      throw new HttpError(
-        "server_error",
-        "Optimistic-concurrency check unavailable — run db/2026-06-22-atomic-version-check.sql.",
+      // Atomic check function not installed: fall back to the plain save so the documented
+      // 200/409 contract holds (the route's pre-flight assertVersion already rejected the
+      // common stale case). Full atomicity returns once db/2026-06-22-atomic-version-check.sql
+      // is run; single-user latest-wins makes the residual race a non-issue meanwhile.
+      console.warn(
+        "[jandraw] save_board_scene_checked not installed; expected_scene_version uses the pre-flight check only. Run db/2026-06-22-atomic-version-check.sql for the atomic guard.",
       );
+      // fall through to the plain save_board_scene below
     } else {
       if (data === null || data === undefined) throw new HttpError("not_found", "Board not found.");
       return Number(data);

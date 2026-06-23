@@ -301,12 +301,18 @@ export default function Editor({ boardId }: { boardId: string }) {
   }
 
   async function copyLink() {
+    const url = viewLink(shareToken);
     try {
-      await navigator.clipboard.writeText(viewLink(shareToken));
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
+      // Feature-detect: navigator.clipboard is undefined in non-secure contexts (http LAN).
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+        return;
+      }
+      window.prompt("Copy this view link:", url);
     } catch {
-      /* ignore */
+      window.prompt("Copy this view link:", url);
     }
   }
 

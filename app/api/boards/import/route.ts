@@ -40,7 +40,9 @@ export async function POST(req: NextRequest) {
       if (typeof nameField === "string" && nameField.trim()) {
         fallbackName = nameField;
       } else if (file.name) {
-        fallbackName = file.name.replace(/\.(excalidraw|json)$/i, "");
+        // clamp the auto-derived filename so a long filename can't 400 an otherwise-valid
+        // import (an explicit name field / scene.name still gets the full validateName rule).
+        fallbackName = file.name.replace(/\.(excalidraw|json)$/i, "").trim().slice(0, 200) || undefined;
       }
     } else {
       // JSON body path: enforce the same 5 MB cap as multipart (readJson/req.json have none).

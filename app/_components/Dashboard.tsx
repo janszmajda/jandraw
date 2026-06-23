@@ -135,12 +135,19 @@ export default function Dashboard() {
   }
 
   async function copyLink(b: BoardSummary) {
+    const url = viewLink(b.share_token);
     try {
-      await navigator.clipboard.writeText(viewLink(b.share_token));
-      setCopiedId(b.id);
-      setTimeout(() => setCopiedId((c) => (c === b.id ? null : c)), 1500);
+      // navigator.clipboard is undefined in non-secure contexts (e.g. http LAN access from
+      // a phone). Feature-detect and fall back to a prompt so the user can still copy the URL.
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        setCopiedId(b.id);
+        setTimeout(() => setCopiedId((c) => (c === b.id ? null : c)), 1500);
+        return;
+      }
+      window.prompt("Copy this view link:", url);
     } catch {
-      rowFail(b.id);
+      window.prompt("Copy this view link:", url);
     }
   }
 
@@ -209,6 +216,13 @@ export default function Dashboard() {
         <div className="rounded-xl border border-dashed border-black/15 p-10 text-center dark:border-white/15">
           {trash ? (
             <p className="opacity-70">Trash is empty.</p>
+          ) : q.trim() ? (
+            <>
+              <p className="mb-3 opacity-70">No boards match “{q.trim()}”.</p>
+              <button onClick={() => setQ("")} className={btn}>
+                Clear search
+              </button>
+            </>
           ) : (
             <>
               <p className="mb-4 opacity-70">No boards yet. Create one to start.</p>

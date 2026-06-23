@@ -24,9 +24,10 @@ export async function GET(req: NextRequest) {
       .eq("is_deleted", trash === "1")
       .order("updated_at", { ascending: false });
     if (q) {
-      // Escape LIKE metacharacters so a typed % or _ matches literally (default
-      // ESCAPE is backslash; PostgREST adds no custom ESCAPE clause).
-      const esc = q.replace(/[\\%_]/g, (c) => `\\${c}`);
+      // Escape LIKE metacharacters so a typed % or _ matches literally (default ESCAPE is
+      // backslash). Also drop '*', which PostgREST unconditionally treats as a wildcard
+      // alias for % and cannot be passed literally in an ilike pattern.
+      const esc = q.replace(/[\\%_]/g, (c) => `\\${c}`).replace(/\*/g, "");
       query = query.ilike("name", `%${esc}%`);
     }
 
