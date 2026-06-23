@@ -17,6 +17,7 @@ import {
   expectArray,
   expectObject,
   expectBoolean,
+  validateTags,
   assertVersion,
 } from "@/lib/validate";
 
@@ -99,15 +100,17 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       name?: unknown;
       is_public?: unknown;
       is_deleted?: unknown;
+      tags?: unknown;
     }>(req);
 
     const hasName = body.name !== undefined;
     const hasPublic = body.is_public !== undefined;
     const hasDeleted = body.is_deleted !== undefined;
-    if (!hasName && !hasPublic && !hasDeleted) {
+    const hasTags = body.tags !== undefined;
+    if (!hasName && !hasPublic && !hasDeleted && !hasTags) {
       throw new HttpError(
         "bad_request",
-        "At least one of name, is_public, is_deleted must be supplied.",
+        "At least one of name, is_public, is_deleted, tags must be supplied.",
       );
     }
 
@@ -115,10 +118,11 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     if (hasName) update.name = validateName(body.name);
     if (hasPublic) update.is_public = expectBoolean(body.is_public, "is_public");
     if (hasDeleted) update.is_deleted = expectBoolean(body.is_deleted, "is_deleted");
+    if (hasTags) update.tags = validateTags(body.tags);
 
     // Only an is_deleted change is allowed to reach a soft-deleted (trashed) board.
     const row = hasDeleted ? await fetchAnyBoardRow(id) : await fetchActiveBoardRow(id);
-    if (row.is_deleted && (hasName || hasPublic)) {
+    if (row.is_deleted && (hasName || hasPublic || hasTags)) {
       // A trashed board may only have its is_deleted flag flipped - not be renamed or
       // re-published - even when those fields are bundled with is_deleted.
       throw new HttpError("not_found", "Board not found.");

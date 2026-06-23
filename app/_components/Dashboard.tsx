@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { relativeTime, viewLink } from "../_lib/format";
 import { useTheme } from "../_lib/useTheme";
+import { BOARD_TAGS } from "@/lib/tags";
 import Logo from "./Logo";
 
 function SunIcon() {
@@ -29,9 +30,28 @@ type BoardSummary = {
   share_token: string;
   is_deleted: boolean;
   scene_version: number;
+  tags: string[];
   created_at: string;
   updated_at: string;
 };
+
+// Per-tag colour so Jan vs Julia is scannable at a glance. Index 0 = indigo (the
+// app accent), 1 = rose. `on` is the assigned/active pill, `off` the ghost toggle.
+const TAG_STYLES: Record<string, { on: string; off: string }> = {
+  Jan: {
+    on: "border-accent/30 bg-accent/10 text-accent",
+    off: "border-black/15 text-foreground/45 hover:border-accent/40 hover:text-accent dark:border-white/15",
+  },
+  Julia: {
+    on: "border-rose-500/30 bg-rose-500/10 text-rose-600 dark:text-rose-400",
+    off: "border-black/15 text-foreground/45 hover:border-rose-400/50 hover:text-rose-500 dark:border-white/15",
+  },
+};
+const tagStyle = (tag: string) =>
+  TAG_STYLES[tag] ?? {
+    on: "border-accent/30 bg-accent/10 text-accent",
+    off: "border-black/15 text-foreground/45 hover:border-accent/40 dark:border-white/15",
+  };
 
 export default function Dashboard() {
   const router = useRouter();
@@ -42,6 +62,7 @@ export default function Dashboard() {
   const [error, setError] = useState(false);
   const [q, setQ] = useState("");
   const [trash, setTrash] = useState(false);
+  const [tagFilter, setTagFilter] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -57,6 +78,8 @@ export default function Dashboard() {
       const params = new URLSearchParams();
       if (q.trim()) params.set("q", q.trim());
       if (trash) params.set("trash", "1");
+      // Tags only apply to the active Boards list, not Trash.
+      if (!trash && tagFilter) params.set("tag", tagFilter);
       const res = await fetch(`/api/boards?${params.toString()}`);
       if (!res.ok) throw new Error("load failed");
       const data = await res.json();
@@ -67,7 +90,7 @@ export default function Dashboard() {
     } finally {
       if (myId === loadIdRef.current) setLoading(false);
     }
-  }, [q, trash]);
+  }, [q, trash, tagFilter]);
 
   // Debounced reload on search / tab change. Show the skeleton immediately so stale rows
   // aren't rendered under the new header/tab during the debounce+fetch window.
@@ -147,6 +170,33 @@ export default function Dashboard() {
     }
   }
 
+  async function toggleTag(b: BoardSummary, tag: string) {
+    const next = b.tags.includes(tag)
+      ? b.tags.filter((t) => t !== tag)
+      : [...b.tags, tag];
+    // Optimistic: reflect the change immediately, revert if the PATCH fails.
+    setBoards((bs) => bs.map((x) => (x.id === b.id ? { ...x, tags: next } : x)));
+    setRowError((e) => {
+      const { [b.id]: _drop, ...rest } = e;
+      return rest;
+    });
+    try {
+      const res = await fetch(`/api/boards/${b.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tags: next }),
+      });
+      if (!res.ok) throw new Error();
+      // If a tag filter is active and the board no longer carries it, drop it from the list.
+      if (tagFilter && !next.includes(tagFilter)) {
+        setBoards((bs) => bs.filter((x) => x.id !== b.id));
+      }
+    } catch {
+      setBoards((bs) => bs.map((x) => (x.id === b.id ? { ...x, tags: b.tags } : x)));
+      rowFail(b.id);
+    }
+  }
+
   function rowFail(id: string) {
     setRowError((e) => ({ ...e, [id]: "Action failed, try again." }));
   }
@@ -180,6 +230,14 @@ export default function Dashboard() {
         ? "bg-white text-foreground shadow-sm dark:bg-neutral-700"
         : "text-foreground/55 hover:text-foreground"
     }`;
+  const filterChip = (active: boolean, tag: string | null) => {
+    const base = "rounded-full border px-2.5 py-0.5 text-xs font-medium transition";
+    if (!active)
+      return `${base} border-black/10 text-foreground/55 hover:border-black/25 hover:text-foreground dark:border-white/15 dark:hover:border-white/30`;
+    if (tag === null)
+      return `${base} border-foreground/25 bg-foreground/[0.06] text-foreground dark:border-white/25`;
+    return `${base} ${tagStyle(tag).on}`;
+  };
 
   return (
     <main className="mx-auto w-full max-w-3xl flex-1 px-5 py-8">
@@ -212,14 +270,36 @@ export default function Dashboard() {
         </p>
       )}
 
-      {/* Segmented Boards / Trash switch */}
-      <div className="mb-5 inline-flex gap-0.5 rounded-lg border border-black/[0.08] bg-black/[0.03] p-0.5 dark:border-white/10 dark:bg-white/[0.04]">
-        <button onClick={() => setTrash(false)} className={seg(!trash)}>
-          Boards
-        </button>
-        <button onClick={() => setTrash(true)} className={seg(trash)}>
-          Trash
-        </button>
+      {/* Segmented Boards / Trash switch + tag filter */}
+      <div className="mb-5 flex flex-wrap items-center gap-x-4 gap-y-2.5">
+        <div className="inline-flex gap-0.5 rounded-lg border border-black/[0.08] bg-black/[0.03] p-0.5 dark:border-white/10 dark:bg-white/[0.04]">
+          <button onClick={() => setTrash(false)} className={seg(!trash)}>
+            Boards
+          </button>
+          <button onClick={() => setTrash(true)} className={seg(trash)}>
+            Trash
+          </button>
+        </div>
+
+        {!trash && (
+          <div className="flex flex-wrap items-center gap-1.5">
+            <span className="mr-0.5 text-xs uppercase tracking-wide text-foreground/35">
+              Tag
+            </span>
+            <button onClick={() => setTagFilter(null)} className={filterChip(tagFilter === null, null)}>
+              All
+            </button>
+            {BOARD_TAGS.map((tag) => (
+              <button
+                key={tag}
+                onClick={() => setTagFilter((t) => (t === tag ? null : tag))}
+                className={filterChip(tagFilter === tag, tag)}
+              >
+                {tag}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Content */}
@@ -306,6 +386,25 @@ export default function Dashboard() {
                     {b.is_public ? "public" : "private"}
                   </span>
                 )}
+
+                {!trash &&
+                  BOARD_TAGS.map((tag) => {
+                    const on = b.tags.includes(tag);
+                    const st = tagStyle(tag);
+                    return (
+                      <button
+                        key={tag}
+                        onClick={() => toggleTag(b, tag)}
+                        aria-pressed={on}
+                        title={on ? `Remove "${tag}" tag` : `Tag as ${tag}`}
+                        className={`rounded-full border px-2 py-0.5 text-xs font-medium transition ${
+                          on ? st.on : st.off
+                        }`}
+                      >
+                        {tag}
+                      </button>
+                    );
+                  })}
 
                 <span className="text-xs text-foreground/45">
                   {trash ? "deleted " : "edited "}

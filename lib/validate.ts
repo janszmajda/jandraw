@@ -1,4 +1,5 @@
 import { HttpError } from "./http";
+import { BOARD_TAGS, isBoardTag } from "./tags";
 
 // Small request-body validation helpers that throw the right error envelope.
 
@@ -34,6 +35,18 @@ export function expectObject(v: unknown, field: string): Record<string, unknown>
 export function expectBoolean(v: unknown, field: string): boolean {
   if (typeof v !== "boolean") badRequest(`${field} must be a boolean.`);
   return v;
+}
+
+// Validate a tags array: must be an array containing only known tags (lib/tags.ts).
+// Returns a de-duplicated copy, so storing it is idempotent.
+export function validateTags(v: unknown): string[] {
+  if (!Array.isArray(v)) badRequest("tags must be an array.");
+  const out: string[] = [];
+  for (const t of v) {
+    if (!isBoardTag(t)) badRequest(`tags may only contain: ${BOARD_TAGS.join(", ")}.`);
+    if (!out.includes(t)) out.push(t);
+  }
+  return out;
 }
 
 // Optimistic-concurrency check. If the caller supplied expected_scene_version and

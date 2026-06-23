@@ -4,6 +4,7 @@ import { requireAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
 import { createBoard, toSummary, SUMMARY_COLUMNS, type BoardRow } from "@/lib/boards";
 import { validateName, expectArray, expectObject, expectBoolean } from "@/lib/validate";
+import { BOARD_TAGS, isBoardTag } from "@/lib/tags";
 
 type SummaryRow = Omit<BoardRow, "elements" | "app_state" | "files">;
 
@@ -14,8 +15,12 @@ export async function GET(req: NextRequest) {
     const params = new URL(req.url).searchParams;
     const q = params.get("q");
     const trash = params.get("trash");
+    const tag = params.get("tag");
     if (trash !== null && trash !== "1") {
       throw new HttpError("bad_request", 'trash must be "1" when present.');
+    }
+    if (tag !== null && !isBoardTag(tag)) {
+      throw new HttpError("bad_request", `tag must be one of: ${BOARD_TAGS.join(", ")}.`);
     }
 
     let query = supabase
@@ -23,6 +28,11 @@ export async function GET(req: NextRequest) {
       .select(SUMMARY_COLUMNS)
       .eq("is_deleted", trash === "1")
       .order("updated_at", { ascending: false });
+    if (tag) {
+      // tags is a text[]; `contains` -> `tags @> '{tag}'`, served by the GIN index
+      // (boards_tags_idx). Returns boards carrying that tag.
+      query = query.contains("tags", [tag]);
+    }
     if (q) {
       // Escape LIKE metacharacters so a typed % or _ matches literally (default ESCAPE is
       // backslash). Also drop '*', which PostgREST unconditionally treats as a wildcard

@@ -16,6 +16,7 @@ export type BoardRow = {
   share_token: string;
   is_deleted: boolean;
   scene_version: number | string;
+  tags: string[];
   created_at: string;
   updated_at: string;
 };
@@ -30,6 +31,7 @@ export type FullBoard = {
   share_token: string;
   is_deleted: boolean;
   scene_version: number;
+  tags: string[];
   created_at: string;
   updated_at: string;
 };
@@ -37,9 +39,9 @@ export type FullBoard = {
 export type BoardSummary = Omit<FullBoard, "elements" | "app_state" | "files">;
 
 const COLUMNS =
-  "id,name,elements,app_state,files,is_public,share_token,is_deleted,scene_version,created_at,updated_at";
+  "id,name,elements,app_state,files,is_public,share_token,is_deleted,scene_version,tags,created_at,updated_at";
 const SUMMARY_COLUMNS =
-  "id,name,is_public,share_token,is_deleted,scene_version,created_at,updated_at";
+  "id,name,is_public,share_token,is_deleted,scene_version,tags,created_at,updated_at";
 
 // Map a DB row to the full board returned by reads - files rehydrated to inline
 // dataURLs, scene_version coerced from bigint to a plain JS number.
@@ -57,6 +59,7 @@ export async function toFullBoard(row: BoardRow): Promise<FullBoard> {
     share_token: row.share_token,
     is_deleted: row.is_deleted,
     scene_version: Number(row.scene_version),
+    tags: Array.isArray(row.tags) ? row.tags : [],
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
@@ -83,6 +86,7 @@ export async function toFullBoardSafe(row: BoardRow): Promise<FullBoard> {
       share_token: row.share_token,
       is_deleted: row.is_deleted,
       scene_version: Number(row.scene_version),
+      tags: Array.isArray(row.tags) ? row.tags : [],
       created_at: row.created_at,
       updated_at: row.updated_at,
     };
@@ -97,6 +101,7 @@ export function toSummary(row: Omit<BoardRow, "elements" | "app_state" | "files"
     share_token: row.share_token,
     is_deleted: row.is_deleted,
     scene_version: Number(row.scene_version),
+    tags: Array.isArray(row.tags) ? row.tags : [],
     created_at: row.created_at,
     updated_at: row.updated_at,
   };
