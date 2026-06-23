@@ -4,7 +4,7 @@
 -- scene_version could both pass a pre-flight check and both commit (silent lost
 -- update), despite supplying expected_scene_version. saveScene() (lib/boards.ts)
 -- calls this function when expected_scene_version is provided; if this function is
--- not installed it falls back to save_board_scene (so the app keeps working — only
+-- not installed it falls back to save_board_scene (so the app keeps working - only
 -- the atomic race guard is inactive until this runs).
 --
 -- Run once in the Supabase SQL editor.

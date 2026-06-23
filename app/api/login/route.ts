@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { handle, apiOk, readJson, HttpError } from "@/lib/http";
 import { checkSecret, setSessionCookie } from "@/lib/auth";
 
-// POST /api/login — exchange the passphrase for a session cookie. No prior auth.
+// POST /api/login - exchange the passphrase for a session cookie. No prior auth.
 export async function POST(req: NextRequest) {
   return handle(async () => {
     const body = await readJson<{ secret?: unknown }>(req);
@@ -13,7 +13,7 @@ export async function POST(req: NextRequest) {
     try {
       ok = checkSecret(body.secret);
     } catch {
-      ok = false; // secret unset/misconfigured → fail closed (401), never 500
+      ok = false; // secret unset/misconfigured -> fail closed (401), never 500
     }
     if (!ok) {
       throw new HttpError("unauthenticated", "Wrong passphrase.");

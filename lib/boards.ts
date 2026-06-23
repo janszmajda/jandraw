@@ -41,7 +41,7 @@ const COLUMNS =
 const SUMMARY_COLUMNS =
   "id,name,is_public,share_token,is_deleted,scene_version,created_at,updated_at";
 
-// Map a DB row to the full board returned by reads — files rehydrated to inline
+// Map a DB row to the full board returned by reads - files rehydrated to inline
 // dataURLs, scene_version coerced from bigint to a plain JS number.
 export async function toFullBoard(row: BoardRow): Promise<FullBoard> {
   return {
@@ -62,7 +62,7 @@ export async function toFullBoard(row: BoardRow): Promise<FullBoard> {
   };
 }
 
-// Like toFullBoard but never throws on a rehydrate failure — used to build the response
+// Like toFullBoard but never throws on a rehydrate failure - used to build the response
 // AFTER a committed write so a transient Storage blip can't turn a successful write into a
 // 500 (which would make the client retry and double-commit). Degrades to reference-only files.
 export async function toFullBoardSafe(row: BoardRow): Promise<FullBoard> {
@@ -159,11 +159,11 @@ export async function saveScene(
       if (typeof error.message === "string" && error.message.includes("jandraw_version_conflict")) {
         throw new HttpError(
           "conflict",
-          "Scene version mismatch — the board changed since you loaded it.",
+          "Scene version mismatch - the board changed since you loaded it.",
         );
       }
       // "Function not installed" can surface as Postgres 42883 OR PostgREST's PGRST202
-      // schema-cache miss — treat either as the signal to fall back to the plain save.
+      // schema-cache miss - treat either as the signal to fall back to the plain save.
       const code = (error as { code?: string }).code;
       const notInstalled =
         code === "42883" ||
@@ -280,7 +280,7 @@ export async function createBoard(input: CreateBoardInput): Promise<FullBoard> {
       row = data as BoardRow;
     } catch (e) {
       // Roll back the just-inserted row (and any uploaded objects) so a failed create
-      // persists nothing — the error returned to the client then matches reality. Swallow
+      // persists nothing - the error returned to the client then matches reality. Swallow
       // the rollback delete's own outcome so the ORIGINAL error always surfaces.
       const rid = row.id; // capture (row is non-null here) for use inside the async closures
       await deleteBoardImages(rid).catch(() => {});

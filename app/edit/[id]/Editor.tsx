@@ -9,7 +9,7 @@ import { relativeTime, viewLink } from "../../_lib/format";
 const ExcalidrawCanvas = dynamic(() => import("../../_components/ExcalidrawCanvas"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-full items-center justify-center opacity-70">Loading editor…</div>
+    <div className="flex h-full items-center justify-center opacity-70">Loading editor...</div>
   ),
 });
 
@@ -20,8 +20,8 @@ type Snapshot = { id: string; scene_version: number; created_at: string };
 // Persisted app_state keys that change only by deliberate user action (a canvas
 // background or grid change), never by selection / scroll / zoom / tool churn.
 // Folding just these into the save signature makes those changes save, while pure
-// view churn (which never touches them) is still skipped — so board_snapshots
-// isn't flooded by transient app_state keys (activeTool, openMenu, selection, …).
+// view churn (which never touches them) is still skipped - so board_snapshots
+// isn't flooded by transient app_state keys (activeTool, openMenu, selection, ...).
 const SAVABLE_APPSTATE_KEYS = ["viewBackgroundColor", "gridModeEnabled", "gridSize", "gridStep"];
 
 // Signature used to skip no-op saves: elements (id:version), the file-id set, and
@@ -38,7 +38,7 @@ function computeSig(
   const fSig = Object.keys(files ?? {}).sort().join(",");
   const a = (appState ?? {}) as Record<string, unknown>;
   // Fold in the canvas-visual keys AND every currentItem* style default (all persisted
-  // per A.10) so changing a default style (e.g. stroke color, font) autosaves — but NOT
+  // per A.10) so changing a default style (e.g. stroke color, font) autosaves - but NOT
   // transient UI keys (activeTool, selection, scroll, zoom) which would cause save churn.
   const keys = [
     ...SAVABLE_APPSTATE_KEYS,
@@ -196,8 +196,8 @@ export default function Editor({ boardId }: { boardId: string }) {
       files: Record<string, unknown>,
     ) => {
       if (!readyRef.current || suspendRef.current) return;
-      // Snapshot the live scene (non-deleted, matching getSceneElements) so any later save —
-      // including the final one on unmount — persists THIS, never the empty scene a
+      // Snapshot the live scene (non-deleted, matching getSceneElements) so any later save -
+      // including the final one on unmount - persists THIS, never the empty scene a
       // torn-down Excalidraw API returns.
       latestSceneRef.current = { elements: elements.filter((e) => !e?.isDeleted), appState, files };
       const sig = computeSig(elements, appState, files);
@@ -210,7 +210,7 @@ export default function Editor({ boardId }: { boardId: string }) {
         lastSavedSigRef.current = sig;
         return;
       }
-      if (sig === lastSavedSigRef.current) return; // view-only churn → no save
+      if (sig === lastSavedSigRef.current) return; // view-only churn -> no save
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => void doSave(), 1500);
     },
@@ -243,7 +243,7 @@ export default function Editor({ boardId }: { boardId: string }) {
           })
           .catch(() => {});
       }
-      // Tab BLUR (page survives): use the normal serialized autosave — it completes, it
+      // Tab BLUR (page survives): use the normal serialized autosave - it completes, it
       // surfaces failure as "Save failed", and it never races an untracked concurrent PUT.
       if (!isClosing) {
         void doSave();
@@ -285,9 +285,9 @@ export default function Editor({ boardId }: { boardId: string }) {
     return () => {
       window.removeEventListener("beforeunload", onBeforeUnload);
       document.removeEventListener("visibilitychange", onVisibility);
-      // Client-side unmount (e.g. clicking "‹ Back"): a real page close is handled by
+      // Client-side unmount (e.g. clicking "< Back"): a real page close is handled by
       // beforeunload above and never runs this cleanup. Cancel any pending debounce, then
-      // persist the last live scene if it's dirty — from latestSceneRef, NOT the Excalidraw
+      // persist the last live scene if it's dirty - from latestSceneRef, NOT the Excalidraw
       // API (whose post-unmount empty read is exactly what blanked boards on exit). A normal
       // fetch survives an in-app navigation, with no keepalive size cap, so large boards save too.
       if (debounceRef.current) {
@@ -476,7 +476,7 @@ export default function Editor({ boardId }: { boardId: string }) {
 
   // ---- Render states ----
   if (status === "loading") {
-    return <div className="flex min-h-full flex-1 items-center justify-center opacity-70">Loading…</div>;
+    return <div className="flex min-h-full flex-1 items-center justify-center opacity-70">Loading...</div>;
   }
   if (status === "notfound") {
     return (
@@ -501,7 +501,7 @@ export default function Editor({ boardId }: { boardId: string }) {
 
   const saveLabel =
     saveStatus === "saving"
-      ? "Saving…"
+      ? "Saving..."
       : saveStatus === "failed"
         ? "Save failed"
         : "Saved";
@@ -546,14 +546,14 @@ export default function Editor({ boardId }: { boardId: string }) {
 
         <div className="relative flex items-center gap-0.5">
           <button onClick={copyLink} className={barBtn}>
-            {copied ? "Copied ✓" : "Copy link"}
+            {copied ? "Copied" : "Copy link"}
           </button>
           <button
             onClick={() => setRotateOpen((o) => !o)}
             className={barBtn}
             aria-label="Share link options"
           >
-            ⋯
+            ...
           </button>
           {rotateOpen && (
             <div className="absolute right-0 top-9 z-10 w-48 rounded-lg border border-black/[0.08] bg-white p-1 shadow-lg dark:border-white/15 dark:bg-neutral-900">
@@ -627,7 +627,7 @@ export default function Editor({ boardId }: { boardId: string }) {
             <div className="flex-1 overflow-y-auto p-2">
               <div className="rounded-md px-2 py-2 text-sm font-medium opacity-80">now</div>
               {snapshotsLoading ? (
-                <div className="px-2 py-2 text-sm opacity-60">Loading…</div>
+                <div className="px-2 py-2 text-sm opacity-60">Loading...</div>
               ) : snapshots.length === 0 ? (
                 <div className="px-2 py-2 text-sm opacity-60">No history yet.</div>
               ) : (

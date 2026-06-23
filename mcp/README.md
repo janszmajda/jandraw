@@ -2,7 +2,7 @@
 
 A small [MCP](https://modelcontextprotocol.io) server that exposes Jandraw board
 tools so an MCP client (e.g. Claude) can read and edit your boards directly via
-tool calls — the same way the Excalidraw+ MCP works, but against your own Jandraw.
+tool calls - the same way the Excalidraw+ MCP works, but against your own Jandraw.
 
 It's a thin wrapper over the Jandraw HTTP API: it holds no data itself, just
 forwards tool calls to the API using your edit secret as a Bearer token.
@@ -13,16 +13,16 @@ forwards tool calls to the API using your edit secret as a Bearer token.
 `delete_elements`, `replace_board`, `rename_board`, `set_board_public`,
 `delete_board`, `list_snapshots`, `restore_snapshot`.
 
-The surgical editing tools are `add_elements` / `update_elements` /
+The element editing tools are `add_elements` / `update_elements` /
 `delete_elements`; array order is z-order (appended elements draw on top).
 
 ## Configuration
 
 The server needs two values from its environment:
 
-- `JANDRAW_API_URL` — the Jandraw base URL. `http://localhost:3000` for local dev;
+- `JANDRAW_API_URL` - the Jandraw base URL. `http://localhost:3000` for local dev;
   your `https://<project>.vercel.app` URL once deployed.
-- `JANDRAW_EDIT_SECRET` — the bearer token (your Jandraw edit passphrase). The
+- `JANDRAW_EDIT_SECRET` - the bearer token (your Jandraw edit passphrase). The
   server auto-loads it from the repo `.env.local` if it isn't already in the
   environment, so you don't have to put the secret in any MCP config.
 

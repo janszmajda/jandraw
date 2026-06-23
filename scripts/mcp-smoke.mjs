@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // Jandraw MCP smoke test. Spawns mcp/server.mjs, performs the MCP handshake over
-// stdio, and calls list_boards through it — proving the server's env loading,
+// stdio, and calls list_boards through it - proving the server's env loading,
 // auth, and API connectivity all work end-to-end.
 //
 //   node scripts/mcp-smoke.mjs
 //   JANDRAW_API_URL=https://jandraw.vercel.app node scripts/mcp-smoke.mjs
 //
 // The target URL comes from JANDRAW_API_URL (env) and the secret from the
-// environment or .env.local — exactly like the real MCP client launch.
+// environment or .env.local - exactly like the real MCP client launch.
 import { spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";

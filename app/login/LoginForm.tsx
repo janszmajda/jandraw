@@ -68,7 +68,7 @@ export default function LoginForm() {
             disabled={loading || secret.length === 0}
             className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition hover:bg-accent-hover disabled:opacity-50"
           >
-            {loading ? "Signing in…" : "Sign in"}
+            {loading ? "Signing in..." : "Sign in"}
           </button>
 
           {error && (

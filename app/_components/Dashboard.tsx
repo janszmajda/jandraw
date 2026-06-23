@@ -91,7 +91,7 @@ export default function Dashboard() {
       router.push(`/edit/${board.id}`);
     } catch {
       setCreating(false);
-      setCreateError(true); // inline notice — do NOT wipe the loaded list with the global load error
+      setCreateError(true); // inline notice - do NOT wipe the loaded list with the global load error
     }
   }
 
@@ -190,7 +190,7 @@ export default function Dashboard() {
           <input
             value={q}
             onChange={(e) => setQ(e.target.value)}
-            placeholder="Search boards…"
+            placeholder="Search boards..."
             className="w-40 rounded-lg border border-black/[0.1] bg-black/[0.02] px-3 py-1.5 text-sm outline-none transition focus:w-52 focus:border-accent focus:ring-2 focus:ring-accent/20 dark:border-white/15 dark:bg-white/[0.04] sm:w-52 sm:focus:w-60"
           />
           <button
@@ -202,7 +202,7 @@ export default function Dashboard() {
             {!mounted ? <MoonIcon /> : theme === "dark" ? <SunIcon /> : <MoonIcon />}
           </button>
           <button onClick={newBoard} disabled={creating} className={primaryBtn}>
-            {creating ? "Creating…" : "New board"}
+            {creating ? "Creating..." : "New board"}
           </button>
         </div>
       </header>
@@ -245,7 +245,7 @@ export default function Dashboard() {
             <p className="text-foreground/55">Trash is empty.</p>
           ) : q.trim() ? (
             <>
-              <p className="mb-3 text-foreground/55">No boards match “{q.trim()}”.</p>
+              <p className="mb-3 text-foreground/55">No boards match &quot;{q.trim()}&quot;.</p>
               <button onClick={() => setQ("")} className={ghostBtn}>
                 Clear search
               </button>
@@ -329,7 +329,7 @@ export default function Dashboard() {
                       Open
                     </button>
                     <button onClick={() => copyLink(b)} className={ghostBtn}>
-                      {copiedId === b.id ? "Copied ✓" : "Copy view link"}
+                      {copiedId === b.id ? "Copied" : "Copy view link"}
                     </button>
                     <button
                       onClick={() => {

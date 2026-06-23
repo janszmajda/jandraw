@@ -6,7 +6,7 @@ import { rehydrateImages } from "@/lib/images";
 
 type Ctx = { params: Promise<{ token: string }> };
 
-// GET /api/view/[token] — read-only public scene by share token. No auth.
+// GET /api/view/[token] - read-only public scene by share token. No auth.
 // A single 404 covers unknown token / private / soft-deleted so existence never leaks.
 export async function GET(_req: NextRequest, ctx: Ctx) {
   return handle(async () => {

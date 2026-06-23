@@ -7,7 +7,7 @@ import Logo from "../../_components/Logo";
 
 const ExcalidrawCanvas = dynamic(() => import("../../_components/ExcalidrawCanvas"), {
   ssr: false,
-  loading: () => <Centered>Loading…</Centered>,
+  loading: () => <Centered>Loading...</Centered>,
 });
 
 type ViewBoard = {
@@ -59,7 +59,7 @@ export default function Viewer({ token }: { token: string }) {
     return () => ctrl.abort();
   }, [token, nonce]);
 
-  if (state === "loading") return <Centered>Loading…</Centered>;
+  if (state === "loading") return <Centered>Loading...</Centered>;
   if (state === "missing")
     return <Centered>This board is private or the link has changed.</Centered>;
   if (state === "error")

@@ -31,8 +31,8 @@ function isSafeFileId(id: string): boolean {
 function isMissingObject(e: unknown): boolean {
   if (e instanceof Error && e.message === "missing object") return true;
   const o = e as { status?: number | string; statusCode?: number | string; message?: string } | null;
-  // Only a DEFINITIVE not-found degrades (drop the entry). Any other error — including a
-  // transient 400-class blip — rethrows so we never hand back a lossy scene that the
+  // Only a DEFINITIVE not-found degrades (drop the entry). Any other error - including a
+  // transient 400-class blip - rethrows so we never hand back a lossy scene that the
   // editor's autosave would then persist as a permanent reference loss. Supabase reports
   // a genuine miss with a "not found" message even when the HTTP status is 400, so the
   // message regex (not a blanket 400) is what catches the real misses.
@@ -46,7 +46,7 @@ function isMissingObject(e: unknown): boolean {
 // Runs before any board write that carries a files map (PUT, element ops, import).
 // Uploads new inline images and returns a reference-only map (never persists a dataURL).
 // A new image (dataURL) is always uploaded before it is marked stored. A `stored: true`
-// entry already present in the input is trusted as-is and NOT existence-verified — this
+// entry already present in the input is trusted as-is and NOT existence-verified - this
 // is the legitimate path for restore/element-ops (refs from our own DB); a bogus
 // client-supplied stored ref with no object simply degrades on read (image dropped),
 // it does not brick the board.
@@ -82,7 +82,7 @@ export async function extractAndStoreImages(boardId: string, files: FilesMap): P
         throw new HttpError("bad_request", `Malformed data URL for file ${fileId}: missing payload.`);
       }
       // Excalidraw image data URLs are always base64-encoded; guard so we never decode
-      // a non-base64 payload as base64. Client input → 400, not 500.
+      // a non-base64 payload as base64. Client input -> 400, not 500.
       const header = inlineDataURL.slice(5, comma); // e.g. "image/png;base64"
       if (!header.includes(";base64")) {
         throw new HttpError("bad_request", `Unsupported data URL for file ${fileId}: expected base64 encoding.`);
@@ -141,7 +141,7 @@ export async function rehydrateImages(boardId: string, files: FilesMap): Promise
         if (isMissingObject(e)) {
           console.warn(`[jandraw] image object missing for ${boardId}/${fileId}; dropping reference`);
         } else {
-          throw e; // transient/unknown — fail loud, don't return a lossy scene
+          throw e; // transient/unknown - fail loud, don't return a lossy scene
         }
       }
     } else {

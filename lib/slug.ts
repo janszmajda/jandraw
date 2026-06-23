@@ -13,7 +13,7 @@ export function slugify(name: string): string {
 }
 
 // Random, unguessable share token for the /v/[token] view link. base64url of
-// 12 bytes ≈ 16 url-safe chars.
+// 12 bytes ~ 16 url-safe chars.
 export function randomToken(): string {
   return randomBytes(12).toString("base64url");
 }

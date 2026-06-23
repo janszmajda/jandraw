@@ -49,7 +49,7 @@ export async function readJson<T = unknown>(req: NextRequest): Promise<T> {
     throw new HttpError("bad_request", "Request body must be valid JSON.");
   }
   // A bare null / number / string / array parses fine but isn't a request object;
-  // reject so handlers can safely read body.<field> without a TypeError → 500.
+  // reject so handlers can safely read body.<field> without a TypeError -> 500.
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new HttpError("bad_request", "Request body must be a JSON object.");
   }

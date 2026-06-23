@@ -1,88 +1,80 @@
 # Jandraw
 
 A self-hosted, single-user [Excalidraw](https://excalidraw.com) workspace. Draw on
-the web, keep your boards in your own Supabase database, share read-only links, and
-— the headline feature — **let Claude edit your boards for you over MCP**.
+the web, store boards in Supabase, share read-only links, and edit boards through
+an MCP server.
 
-Built with Next.js (App Router) + TypeScript + Tailwind, backed by Supabase
-(Postgres + Storage), deployed on Vercel.
+Built with Next.js App Router, TypeScript, Tailwind, Supabase Postgres and
+Supabase Storage. The current deployment target is Vercel.
 
-- **Editor** — the full Excalidraw canvas at `/edit/[id]`, with autosave.
-- **Boards** — create, rename, search, soft-delete (Trash), import/export `.excalidraw`.
-- **History** — automatic snapshots on every save; restore any prior version.
-- **Sharing** — flip a board public and share a read-only `/v/[token]` link; rotate the token to revoke.
-- **Auth** — a single passphrase (`JANDRAW_EDIT_SECRET`) gates all editing; read-only share links need no login.
-- **MCP** — an [MCP](https://modelcontextprotocol.io) server so an AI client can read and surgically edit your boards.
+- **Editor:** Excalidraw canvas at `/edit/[id]`, with autosave.
+- **Boards:** create, rename, search, soft-delete to Trash, import and export `.excalidraw`.
+- **History:** snapshots on save, with restore support.
+- **Sharing:** public read-only `/v/[token]` links, with token rotation to revoke access.
+- **Auth:** one passphrase, `JANDRAW_EDIT_SECRET`, gates editing. Share links do not require login.
+- **MCP:** a local MCP server can read and edit boards through the HTTP API.
 
----
+## MCP
 
-## ✨ Editing your boards with Claude (the MCP feature)
+Jandraw includes an MCP server at `mcp/server.mjs`. It exposes board-editing tools
+over the Jandraw HTTP API for MCP clients such as Claude Code or Claude Desktop.
 
-Jandraw ships an MCP server (`mcp/server.mjs`) that exposes board-editing tools over
-the Jandraw HTTP API. Point any MCP client (Claude Code, Claude Desktop, …) at it and
-you can just **ask, in plain language, for changes to your boards** — Claude calls the
-tools and the edits land on your live boards.
+The server works with Excalidraw element JSON. It can add, update, or delete
+individual elements, and it can replace a whole board when requested. Every write
+creates a snapshot first.
 
-### How you use it
+Example requests once the server is connected:
 
-Once the server is connected (setup below), talk to Claude normally:
+- "List my Jandraw boards."
+- "On the board `sprint-12`, add three rectangles in a row labeled To Do, Doing, Done."
+- "Create a board called `Architecture` and add a box labeled API Gateway."
+- "Move the blue rectangle on `roadmap` 200px to the right and make it green."
+- "Restore the previous snapshot of `roadmap`."
+- "Make `roadmap` public and give me the share link."
 
-- *"List my Jandraw boards."*
-- *"On the board `sprint-12`, add three rectangles in a row labeled To&nbsp;Do, Doing, Done, with a title text above them."*
-- *"Create a new board called `Architecture` and add a box labeled API Gateway."*
-- *"Move the blue rectangle on `roadmap` 200px to the right and make it green."*
-- *"That looks wrong — restore the previous snapshot of `roadmap`."*
-- *"Make `roadmap` public and give me the share link."* (then open `/v/<token>`)
-
-Claude works in real Excalidraw element JSON. It makes **surgical** edits by default
-(add / update / delete individual elements) and only rewrites a whole board when asked.
-Every write snapshots the prior state first, so changes are always reversible.
-
-### Tools the server exposes
+## MCP Tools
 
 | Tool | What it does |
 |------|--------------|
-| `list_boards` | List boards (filter by `q`, or `trash:true`) |
-| `get_board` | Fetch one board's full scene (image bytes omitted unless asked) |
-| `create_board` | Create a new board |
-| `add_elements` | Append new elements (each `id` must be new) |
-| `update_elements` | Shallow-merge changes into existing elements by `id` |
-| `delete_elements` | Remove elements by `id` (idempotent) |
-| `replace_board` | Overwrite the whole scene (big rewrites) |
-| `rename_board` / `set_board_public` / `delete_board` | Metadata + lifecycle |
-| `list_snapshots` / `restore_snapshot` | History + undo |
+| `list_boards` | List boards, optionally filtered by `q` or `trash:true`. |
+| `get_board` | Fetch one board's full scene. Image bytes are omitted unless requested. |
+| `create_board` | Create a new board. |
+| `add_elements` | Append new elements. Each `id` must be new. |
+| `update_elements` | Shallow-merge changes into existing elements by `id`. |
+| `delete_elements` | Remove elements by `id`. Unknown IDs are ignored. |
+| `replace_board` | Overwrite the whole scene. |
+| `rename_board` | Rename a board. |
+| `set_board_public` | Toggle public read-only access. |
+| `delete_board` | Soft-delete or hard-delete a board. |
+| `list_snapshots` | List saved snapshots. |
+| `restore_snapshot` | Restore a saved snapshot. |
 
-Writes accept an optional `expected_scene_version` for optimistic-concurrency (the
-server returns `409` if the board changed underneath you).
+Writes accept an optional `expected_scene_version`. The server returns `409` if the
+board changed since that version.
 
----
-
-## 🔌 Setting up the MCP in your own environment
+## MCP Setup
 
 ### Prerequisites
 
-- **Node.js 18+**
-- A **running Jandraw instance** — either your deployed URL (e.g. `https://your-app.vercel.app`) or a local dev server (`http://localhost:3000`).
-- Your **edit passphrase** (`JANDRAW_EDIT_SECRET`) — the same one you log in with. It's the bearer token the MCP uses to authenticate.
+- Node.js 18+
+- A running Jandraw instance, either deployed or local.
+- `JANDRAW_EDIT_SECRET`, the same passphrase used for web login.
 
-### The two settings the server needs
+### Environment
 
 | Env var | Meaning |
 |---------|---------|
-| `JANDRAW_API_URL` | Where your Jandraw runs. Defaults to `http://localhost:3000`. |
-| `JANDRAW_EDIT_SECRET` | Your edit passphrase (bearer token). |
+| `JANDRAW_API_URL` | Jandraw base URL. Defaults to `http://localhost:3000`. |
+| `JANDRAW_EDIT_SECRET` | Edit passphrase used as the bearer token. |
 
-The server reads both from the process environment, **falling back to the repo's
-`.env.local`**. `.env.local` is gitignored — keep your secret there (or in your MCP
-client's secret store), never in a committed file.
+The server reads both from the process environment and falls back to `.env.local`.
+Keep `.env.local` private.
 
-### Option A — Claude Code (run from the repo)
+### Claude Code
 
-This repo already contains a `.mcp.json`. Set the URL to your instance and keep the
-secret in `.env.local`:
+The repo includes `.mcp.json`:
 
 ```jsonc
-// .mcp.json
 {
   "mcpServers": {
     "jandraw": {
@@ -94,18 +86,18 @@ secret in `.env.local`:
 }
 ```
 
+Put the secret in `.env.local`:
+
 ```bash
-# .env.local  (gitignored — the secret lives here, not in .mcp.json)
 JANDRAW_EDIT_SECRET=your-edit-passphrase
 ```
 
-Launch Claude Code from the repo root, approve the `jandraw` server when prompted, and
-manage it any time with `/mcp`.
+Launch Claude Code from the repo root and approve the `jandraw` server when
+prompted. Use `/mcp` to inspect or manage the connection.
 
-### Option B — Claude Desktop / other MCP clients
+### Other MCP Clients
 
-Use absolute paths. If the client isn't launched next to a `.env.local`, put the secret
-directly in the client config (and make sure that config file is private):
+Use absolute paths if the client is not launched from this repo:
 
 ```jsonc
 {
@@ -122,59 +114,61 @@ directly in the client config (and make sure that config file is private):
 }
 ```
 
-### Verify the connection
-
-A bundled smoke test spawns the server, does the MCP handshake, and calls `list_boards`:
+### Verify
 
 ```bash
 JANDRAW_API_URL=https://your-app.vercel.app node scripts/mcp-smoke.mjs
-# -> OK: list_boards returned N board(s)
 ```
 
-If you see `401`/auth errors, the secret doesn't match the target instance. If you see a
-connection error, check `JANDRAW_API_URL` and that the instance is up.
+Expected output:
 
----
+```text
+OK: list_boards returned N board(s)
+```
 
-## Running Jandraw yourself
+If the command returns `401`, check the secret. If it cannot connect, check
+`JANDRAW_API_URL` and the app deployment.
+
+## Run Jandraw
 
 ### 1. Supabase
 
-Create a Supabase project, then run the SQL in `db/` (the schema, plus
-`db/2026-06-22-atomic-version-check.sql` for the atomic save guard) in the SQL editor,
-and create a **private** Storage bucket named `board-images`. The `service_role` role
-needs `grant usage, all on schema public` if writes return permission errors.
+Create a Supabase project, run the SQL in `db/`, and create a private Storage
+bucket named `board-images`. If writes fail with permission errors, grant the
+`service_role` role usage on the public schema.
 
 ### 2. Environment
 
-Copy your values into `.env.local` (gitignored):
+Create `.env.local`:
 
 ```bash
 SUPABASE_URL=https://<project-ref>.supabase.co
-SUPABASE_SERVICE_ROLE_KEY=<service_role key — server-only, never shipped to the browser>
-JANDRAW_EDIT_SECRET=<a long, random passphrase>
+SUPABASE_SERVICE_ROLE_KEY=<service_role key>
+JANDRAW_EDIT_SECRET=<long random passphrase>
 ```
 
-> **Security:** the `service_role` key bypasses row-level security and is used only on
-> the server. Pick a strong `JANDRAW_EDIT_SECRET` (30+ random chars) — on a public
-> deployment it's the only thing protecting your boards from edits.
+`SUPABASE_SERVICE_ROLE_KEY` bypasses row-level security and must stay server-side.
+On a public deployment, `JANDRAW_EDIT_SECRET` is the edit boundary for the app.
 
-### 3. Develop / build
+### 3. Develop and Build
 
 ```bash
 npm install
-npm run dev      # http://localhost:3000
-npm run build && npm start   # production build
+npm run dev
+npm run build
+npm start
 ```
 
-Run the HTTP regression suite (against local or a deployed URL) with:
+Local dev runs at `http://localhost:3000`.
+
+Run the HTTP regression suite:
 
 ```bash
 bash scripts/regression.sh
-JANDRAW_API_URL=https://your-app.vercel.app JANDRAW_EDIT_SECRET=… bash scripts/regression.sh
+JANDRAW_API_URL=https://your-app.vercel.app JANDRAW_EDIT_SECRET=<secret> bash scripts/regression.sh
 ```
 
 ### 4. Deploy on Vercel
 
-Import the repo in Vercel, add the three env vars above in **Settings → Environment
-Variables**, and deploy. Pushes to `master` auto-deploy.
+Import the repo in Vercel, add the three env vars above under Environment
+Variables, and deploy. Pushes to `master` auto-deploy.

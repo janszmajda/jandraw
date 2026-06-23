@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Inter, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
-// Inter is Mercor's typeface — clean, modern, with a light-weight display feel.
+// Inter is Mercor's typeface - clean, modern, with a light-weight display feel.
 const inter = Inter({
   variable: "--font-inter",
   subsets: ["latin"],

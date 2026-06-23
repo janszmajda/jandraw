@@ -8,7 +8,7 @@ type Ctx = { params: Promise<{ id: string }> };
 
 type SnapshotRow = { id: string; board_id: string; scene_version: number | string; created_at: string };
 
-// GET /api/boards/[id]/snapshots — history list, newest first. Heavy fields omitted.
+// GET /api/boards/[id]/snapshots - history list, newest first. Heavy fields omitted.
 export async function GET(req: NextRequest, ctx: Ctx) {
   return handle(async () => {
     requireAuth(req);

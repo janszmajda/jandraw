@@ -24,7 +24,7 @@ function elemId(e: unknown): string | null {
 const stringIds = (els: unknown[]): Set<string> =>
   new Set(els.map(elemId).filter((x): x is string => x !== null));
 
-// POST /api/boards/[id]/elements — append NEW elements on top (append-only). An id that
+// POST /api/boards/[id]/elements - append NEW elements on top (append-only). An id that
 // already exists is rejected (use PATCH); duplicate ids WITHIN the request collapse.
 export async function POST(req: NextRequest, ctx: Ctx) {
   return handle(async () => {
@@ -64,7 +64,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
   });
 }
 
-// PATCH /api/boards/[id]/elements — shallow-merge partial updates by id (atomic; any
+// PATCH /api/boards/[id]/elements - shallow-merge partial updates by id (atomic; any
 // unknown id rejects the whole request with 400). Unrecognized entries pass through.
 export async function PATCH(req: NextRequest, ctx: Ctx) {
   return handle(async () => {
@@ -108,7 +108,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   });
 }
 
-// DELETE /api/boards/[id]/elements — remove elements by id (idempotent). Per the orphan
+// DELETE /api/boards/[id]/elements - remove elements by id (idempotent). Per the orphan
 // policy, removing an image element does NOT delete its Storage object.
 export async function DELETE(req: NextRequest, ctx: Ctx) {
   return handle(async () => {

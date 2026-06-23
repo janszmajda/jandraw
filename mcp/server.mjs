@@ -1,12 +1,12 @@
 #!/usr/bin/env node
-// Jandraw MCP server — exposes board-editing tools over the Jandraw HTTP API so an
-// MCP client (e.g. Claude) can read and surgically edit boards via tool calls.
+// Jandraw MCP server - exposes board-editing tools over the Jandraw HTTP API so an
+// MCP client (e.g. Claude) can read and edit boards via tool calls.
 //
 // Config (env): JANDRAW_API_URL (default http://localhost:3000) and the bearer
 // JANDRAW_EDIT_SECRET. Both can come from the process env or the repo .env.local
 // (auto-loaded below). Run with: node --env-file=.env.local mcp/server.mjs
 //
-// stdio transport: stdout is the protocol channel — never write to it; logs go to stderr.
+// stdio transport: stdout is the protocol channel - never write to it; logs go to stderr.
 
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -96,7 +96,7 @@ async function api(method, path, body) {
     throw new Error(detail ? `HTTP ${res.status}: ${detail}` : `HTTP ${res.status}`);
   }
   // A 2xx with an empty/non-JSON body (proxy/CDN page, empty 200) would otherwise make a
-  // handler read .scene_version off null/string → confusing TypeError. Fail clearly instead.
+  // handler read .scene_version off null/string -> confusing TypeError. Fail clearly instead.
   if (data === null || typeof data !== "object") {
     throw new Error(`HTTP ${res.status} from ${method} ${path}: response body was not a JSON object`);
   }
@@ -187,7 +187,7 @@ server.registerTool(
   "add_elements",
   {
     title: "Add elements",
-    description: "Append NEW Excalidraw element objects to a board (array order is z-order; appended elements draw on top). Each element needs at least an `id` and `type`, and each id must NOT already exist on the board — use update_elements to edit an existing element (re-adding an existing id is rejected with 400).",
+    description: "Append NEW Excalidraw element objects to a board (array order is z-order; appended elements draw on top). Each element needs at least an `id` and `type`, and each id must NOT already exist on the board - use update_elements to edit an existing element (re-adding an existing id is rejected with 400).",
     inputSchema: {
       id: z.string().describe("the board slug/id"),
       elements: z.array(z.record(z.any())).describe("full Excalidraw element objects to append"),
@@ -223,7 +223,7 @@ server.registerTool(
   "delete_elements",
   {
     title: "Delete elements",
-    description: "Remove elements from a board by id (idempotent — unknown ids are ignored). Returns how many were removed.",
+    description: "Remove elements from a board by id (idempotent - unknown ids are ignored). Returns how many were removed.",
     inputSchema: {
       id: z.string().describe("the board slug/id"),
       ids: z.array(z.string()).describe("element ids to remove"),
@@ -241,7 +241,7 @@ server.registerTool(
   "replace_board",
   {
     title: "Replace board scene",
-    description: "Full-board replace (overwrites elements, app_state, files wholesale). Snapshots the prior state first. Prefer add/update/delete_elements for surgical edits; use this for big rewrites.",
+    description: "Full-board replace (overwrites elements, app_state, files wholesale). Snapshots the prior state first. Prefer add/update/delete_elements for element edits; use this for big rewrites.",
     inputSchema: {
       id: z.string(),
       elements: z.array(z.record(z.any())).describe("the complete new elements array"),

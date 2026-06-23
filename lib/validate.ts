@@ -47,7 +47,7 @@ export function assertVersion(expected: unknown, current: number): void {
   if (expected !== current) {
     throw new HttpError(
       "conflict",
-      "Scene version mismatch — the board changed since you loaded it.",
+      "Scene version mismatch - the board changed since you loaded it.",
     );
   }
 }

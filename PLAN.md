@@ -2,7 +2,7 @@
 
 ---
 
-## Current state (as-built — 2026-06-23)
+## Current state (as-built - 2026-06-23)
 
 > This section is the up-to-date snapshot of the **shipped** app. The sections that
 > follow it are the original build plan + spec; they remain accurate as reference for
@@ -39,13 +39,13 @@
 - **Deploy (done):** runbook step 10 is complete; the app is live on Vercel.
 
 ### Hardening + testing
-- A multi-agent code-review/critic **bug-hunt loop** was run to convergence (confirmed-finding counts 24 → 21 → 16 → 15 → 11 → 7 → 6; final round 0 critical / 0 high).
-- `scripts/regression.sh` — a 65-check HTTP regression suite (auth, validation, search escaping, board CRUD, the granular elements API, the version guard, snapshots/restore, export, public view, token rotation, import, trash lifecycle). Reads the secret from the env / `.env.local`. Passes against both local and production. Run with `bash scripts/regression.sh` or `JANDRAW_API_URL=https://jandraw.vercel.app JANDRAW_EDIT_SECRET=… bash scripts/regression.sh`.
-- `scripts/mcp-smoke.mjs` — spawns the MCP server, does the protocol handshake, and calls `list_boards` end-to-end.
+- A multi-agent code-review/critic **bug-hunt loop** was run to convergence (confirmed-finding counts 24 -> 21 -> 16 -> 15 -> 11 -> 7 -> 6; final round 0 critical / 0 high).
+- `scripts/regression.sh` - a 65-check HTTP regression suite (auth, validation, search escaping, board CRUD, the granular elements API, the version guard, snapshots/restore, export, public view, token rotation, import, trash lifecycle). Reads the secret from the env / `.env.local`. Passes against both local and production. Run with `bash scripts/regression.sh` or `JANDRAW_API_URL=https://jandraw.vercel.app JANDRAW_EDIT_SECRET=... bash scripts/regression.sh`.
+- `scripts/mcp-smoke.mjs` - spawns the MCP server, does the protocol handshake, and calls `list_boards` end-to-end.
 
 ### Notable bugs found and fixed
 - **Save-on-open churn:** opening a board double-saved (Excalidraw's mount `onChange` differs from the stored `app_state`), flooding snapshots. Fixed by adopting the first post-mount `onChange` as the save baseline.
-- **Blank-on-exit data loss (critical):** opening a board, editing, then leaving via "‹ Back" could overwrite it with an empty canvas. Root cause: the autosave read the scene from the Excalidraw API, and a debounced save pending when the component unmounted (client-side nav fires no `beforeunload`) ran ~1.5s later against a torn-down Excalidraw, which returns an empty element array — that empty scene was PUT. Fix: saves capture the live scene on every `onChange` into a ref and never read the (possibly dead) API; `doSave` is guarded against running post-unmount; the pending debounce is cleared on unmount; and a final save persists the captured scene via a normal fetch that survives in-app navigation. Verified with a real-browser repro on both local and prod (open → draw → Back immediately → reopen → content + edit survive). The two seeded boards' lost content was recovered from snapshots.
+- **Blank-on-exit data loss (critical):** opening a board, editing, then leaving via "< Back" could overwrite it with an empty canvas. Root cause: the autosave read the scene from the Excalidraw API, and a debounced save pending when the component unmounted (client-side nav fires no `beforeunload`) ran ~1.5s later against a torn-down Excalidraw, which returns an empty element array - that empty scene was PUT. Fix: saves capture the live scene on every `onChange` into a ref and never read the (possibly dead) API; `doSave` is guarded against running post-unmount; the pending debounce is cleared on unmount; and a final save persists the captured scene via a normal fetch that survives in-app navigation. Verified with a real-browser repro on both local and prod (open -> draw -> Back immediately -> reopen -> content + edit survive). The two seeded boards' lost content was recovered from snapshots.
 
 ### Open / optional
 - Custom domain (still on the free `.vercel.app` URL).
@@ -68,15 +68,15 @@ Already installed on this machine (verified):
 You still need to set up:
 
 1. A Supabase project, fresh and separate from any Jericho work.
-   - Create a new project at supabase.com.
-   - In Project Settings, API, copy two values: the Project URL and the service_role key.
-   - Run the SQL in section A (A.1 through A.10) in the Supabase SQL editor.
-   - Create the private Storage bucket named `board-images` (A.5 has the SQL, or make it in the dashboard with Public off).
+  - Create a new project at supabase.com.
+  - In Project Settings, API, copy two values: the Project URL and the service_role key.
+  - Run the SQL in section A (A.1 through A.10) in the Supabase SQL editor.
+  - Create the private Storage bucket named `board-images` (A.5 has the SQL, or make it in the dashboard with Public off).
 
 2. A Vercel account. Only needed to deploy, local dev runs without it.
-   - Sign up at vercel.com.
-   - At deploy time, either connect a GitHub repo or run the `vercel` CLI from this folder.
-   - Set the environment variables (below) in the Vercel project settings.
+  - Sign up at vercel.com.
+  - At deploy time, either connect a GitHub repo or run the `vercel` CLI from this folder.
+  - Set the environment variables (below) in the Vercel project settings.
 
 3. Pick a passphrase. This one secret is how you log in to edit, it also signs the session cookie, and it is the value the Authorization Bearer API check compares against. Choose something long and random.
 
@@ -273,16 +273,16 @@ Share links are built from the browser origin at click time (section C), so ther
   element endpoints for surgical edits, PUT for big rewrites, export to grab a file.
 - This mirrors how Claude uses the Excalidraw+ MCP today, but against Jan's own server with
   no encryption in the way, so editing is straightforward.
-- A thin MCP wrapper over these endpoints ~~can be added later~~ **is built** (`mcp/server.mjs`, 12 tools; `.mcp.json` points it at the live site). This is now the primary way Claude edits boards — see "Current state" and `README.md`.
+- A thin MCP wrapper over these endpoints ~~can be added later~~ **is built** (`mcp/server.mjs`, 12 tools; `.mcp.json` points it at the live site). This is now the primary way Claude edits boards - see "Current state" and `README.md`.
 
 ## 12. Build order (implementation runbook)
 
 > All 10 steps are complete and the app is live (see "Current state"). Kept as the historical build order.
 
 1. Scaffold the Next.js app. This folder is not empty (it already has `PLAN.md`, `.git`, and `.gitignore`), and create-next-app refuses a non-empty directory, so scaffold into a temp folder and move the files in. From `C:\Users\jan\Documents\jandraw`:
-   - Run: `npx create-next-app@latest jandraw-tmp --ts --app --tailwind --eslint --no-src-dir --import-alias "@/*" --use-npm --yes`
-   - Move the generated contents up into this folder, keeping the existing `PLAN.md`, `.git`, and the committed `.gitignore` (it already covers `.next`, `.env*`, and `.vercel`). Do not overwrite our files. Then delete `jandraw-tmp`.
-   - Commit the scaffold.
+  - Run: `npx create-next-app@latest jandraw-tmp --ts --app --tailwind --eslint --no-src-dir --import-alias "@/*" --use-npm --yes`
+  - Move the generated contents up into this folder, keeping the existing `PLAN.md`, `.git`, and the committed `.gitignore` (it already covers `.next`, `.env*`, and `.vercel`). Do not overwrite our files. Then delete `jandraw-tmp`.
+  - Commit the scaffold.
 2. Add dependencies: `@excalidraw/excalidraw` and `@supabase/supabase-js`. No auth library is needed: the session cookie is a hand-built HMAC using Node's built-in `crypto` (`createHmac`, `timingSafeEqual`) plus Next's `cookies()` helper (see section B). If `npm install @excalidraw/excalidraw` reports a peer-dependency error against the React or Next major that create-next-app pulled, retry with `--legacy-peer-deps`, or pin Excalidraw to its current stable release and the React major it expects.
 3. Supabase: create the fresh project, run the schema SQL for `boards` and `board_snapshots`,
    create the `board-images` bucket, and collect the URL and service-role key.
@@ -697,7 +697,7 @@ Notes:
 - Step 1 runs only for the scene-changing routes listed above, where `elements`, `app_state`, or `files` actually change.
 - Restore (`POST /api/boards/[id]/restore/[snapId]`) is itself a scene write: the route reads the chosen snapshot row, then calls `save_board_scene` with that snapshot's `elements`, `app_state`, and `files`, so the current state is snapshotted first (step 1) and restoring is itself undoable.
 - `scene_version` is bigint in the column. supabase-js returns it as a JS number in JSON; realistic counts stay well under 2^53, so the route coerces with `Number(...)` and returns a plain number. Do not hand-roll BigInt serialization (`JSON.stringify` of a BigInt throws).
-- As-built addition: `db/2026-06-22-atomic-version-check.sql` defines `save_board_scene_checked` — the same routine plus a `select ... for update` row lock and a version check that raises `jandraw_version_conflict` (mapped to `409`) when the locked `scene_version` differs from `p_expected_version`. The route calls it when `expected_scene_version` is supplied so the check-and-bump is atomic (closing the read-then-write race a pre-flight check alone leaves open), and falls back to plain `save_board_scene` if it is absent. This migration is installed in the live database.
+- As-built addition: `db/2026-06-22-atomic-version-check.sql` defines `save_board_scene_checked` - the same routine plus a `select ... for update` row lock and a version check that raises `jandraw_version_conflict` (mapped to `409`) when the locked `scene_version` differs from `p_expected_version`. The route calls it when `expected_scene_version` is supplied so the check-and-bump is atomic (closing the read-then-write race a pre-flight check alone leaves open), and falls back to plain `save_board_scene` if it is absent. This migration is installed in the live database.
 
 ### A.9 Storage cleanup on hard delete
 
@@ -832,8 +832,8 @@ Exchange the passphrase for a session cookie.
 ```
 
 - Errors:
-  - `400 bad_request`: `secret` missing or not a string.
-  - `401 unauthenticated`: `secret` does not match `JANDRAW_EDIT_SECRET` (compared timing-safe).
+ - `400 bad_request`: `secret` missing or not a string.
+ - `401 unauthenticated`: `secret` does not match `JANDRAW_EDIT_SECRET` (compared timing-safe).
 
 ---
 
@@ -853,7 +853,7 @@ Clear the session cookie.
 ```
 
 - Errors:
-  - `401 unauthenticated`: no valid cookie or bearer token.
+ - `401 unauthenticated`: no valid cookie or bearer token.
 
 ---
 
@@ -865,8 +865,8 @@ List boards for the dashboard, sorted by `updated_at` descending (most recently 
 - Request headers: cookie or `Authorization: Bearer <secret>`.
 - Path params: none.
 - Query params:
-  - `q` (string, optional): case-insensitive substring (contains) search over `name`, backed by the `pg_trgm` GIN index (`ILIKE '%q%'`, see A.3). Not a prefix or exact match.
-  - `trash` (`"1"`, optional): when present, returns only soft-deleted boards (`is_deleted = true`) for the Trash view. When absent, returns only active boards (`is_deleted = false`).
+ - `q` (string, optional): case-insensitive substring (contains) search over `name`, backed by the `pg_trgm` GIN index (`ILIKE '%q%'`, see A.3). Not a prefix or exact match.
+ - `trash` (`"1"`, optional): when present, returns only soft-deleted boards (`is_deleted = true`) for the Trash view. When absent, returns only active boards (`is_deleted = false`).
 - Body: none.
 - Success: `200`. Returns a list of board summaries (the heavy `elements`, `app_state`, and `files` are omitted to keep the list light):
 
@@ -888,8 +888,8 @@ List boards for the dashboard, sorted by `updated_at` descending (most recently 
 ```
 
 - Errors:
-  - `400 bad_request`: `trash` present with a value other than `"1"`.
-  - `401 unauthenticated`: no valid auth.
+ - `400 bad_request`: `trash` present with a value other than `"1"`.
+ - `401 unauthenticated`: no valid auth.
 
 ---
 
@@ -913,11 +913,11 @@ Create a new board.
 }
 ```
 
-  - `name` (string, required): non-empty after trimming; max length 200 characters.
-  - `elements` (array, optional, default `[]`): full Excalidraw element objects.
-  - `app_state` (object, optional, default `{}`): reduced to the persisted allowlist (A.10) before storing.
-  - `files` (object, optional, default `{}`): the full Excalidraw files map. May contain inline `dataURL`s; the server runs `extractAndStoreImages` so the stored `boards.files` is reference-only, exactly `{ [fileId]: { id, mimeType, created, stored: true } }`.
-  - `is_public` (boolean, optional, default `true`).
+ - `name` (string, required): non-empty after trimming; max length 200 characters.
+ - `elements` (array, optional, default `[]`): full Excalidraw element objects.
+ - `app_state` (object, optional, default `{}`): reduced to the persisted allowlist (A.10) before storing.
+ - `files` (object, optional, default `{}`): the full Excalidraw files map. May contain inline `dataURL`s; the server runs `extractAndStoreImages` so the stored `boards.files` is reference-only, exactly `{ [fileId]: { id, mimeType, created, stored: true } }`.
+ - `is_public` (boolean, optional, default `true`).
 
 - Slug generation: `id` is derived from `name` by lowercasing, trimming, and replacing any run of non-alphanumeric characters with a single hyphen (stripping leading and trailing hyphens). An empty result falls back to `board`. The server then tries to insert with that base slug and relies on the DB unique constraint to close the race: on a unique violation (Postgres `23505` on the `boards` primary key), it retries with `-2`, then `-3`, up to 5 attempts; if all collide it appends a 6-character random suffix and tries once more; if that still collides it returns `409`. (Do not pre-check with a SELECT, which has a race between the check and the insert.) The server assigns `share_token` as a random unguessable string and sets `scene_version = 0`.
 - Collision behavior: the slug is auto-resolved by suffixing, so normal creation does not `409`. A `409 conflict` is only returned if a unique slug cannot be produced after the bounded attempts above.
@@ -942,9 +942,9 @@ Create a new board.
 ```
 
 - Errors:
-  - `400 bad_request`: `name` missing, not a string, empty/whitespace, or longer than 200 characters; any supplied field has the wrong type.
-  - `401 unauthenticated`: no valid auth.
-  - `409 conflict`: could not generate a unique slug after the bounded attempts.
+ - `400 bad_request`: `name` missing, not a string, empty/whitespace, or longer than 200 characters; any supplied field has the wrong type.
+ - `401 unauthenticated`: no valid auth.
+ - `409 conflict`: could not generate a unique slug after the bounded attempts.
 
 ---
 
@@ -959,8 +959,8 @@ Fetch one full board (owner view).
 - Body: none.
 - Success: `200`. Returns the full board object (same shape as the `board` object in `POST /api/boards`, including `elements`, `app_state`, and `files`). `files` is rehydrated to the full Excalidraw map with `dataURL`s (A.7), so the editor can pass it as `initialData.files`.
 - Errors:
-  - `401 unauthenticated`: no valid auth.
-  - `404 not_found`: no active board with that `id` (soft-deleted boards also return `404` here).
+ - `401 unauthenticated`: no valid auth.
+ - `404 not_found`: no active board with that `id` (soft-deleted boards also return `404` here).
 
 ---
 
@@ -985,12 +985,12 @@ Full-board replace. This is the editor's debounced autosave AND the import-to-re
 }
 ```
 
-  - `elements` (array): replaces `boards.elements` entirely.
-  - `app_state` (object): replaces `boards.app_state` entirely, after reduction to the persisted allowlist (A.10).
-  - `files` (object): the full Excalidraw files map; may contain inline `dataURL`s. The server runs `extractAndStoreImages` and stores the reference-only map. Replaces `boards.files` entirely.
-  - `name` (string, optional): if present, renames the board. Renaming does NOT change the slug `id`.
-  - `is_public` (boolean, optional): if present, updates publish state.
-  - `expected_scene_version` (number, optional): if present, the write is rejected with `409` unless it equals the current `scene_version`. Omit it to accept the latest-save-wins default.
+ - `elements` (array): replaces `boards.elements` entirely.
+ - `app_state` (object): replaces `boards.app_state` entirely, after reduction to the persisted allowlist (A.10).
+ - `files` (object): the full Excalidraw files map; may contain inline `dataURL`s. The server runs `extractAndStoreImages` and stores the reference-only map. Replaces `boards.files` entirely.
+ - `name` (string, optional): if present, renames the board. Renaming does NOT change the slug `id`.
+ - `is_public` (boolean, optional): if present, updates publish state.
+ - `expected_scene_version` (number, optional): if present, the write is rejected with `409` unless it equals the current `scene_version`. Omit it to accept the latest-save-wins default.
 
 - Behavior: runs `extractAndStoreImages`, then calls `save_board_scene` (A.8), which snapshots the prior state into `board_snapshots`, writes the new scene, and bumps `scene_version` by 1; the trigger sets `updated_at = now()`. `name`/`is_public`, if supplied, are updated in the same write.
 - Success: `200`. Returns the updated board (with rehydrated `files`) and the new version:
@@ -1003,10 +1003,10 @@ Full-board replace. This is the editor's debounced autosave AND the import-to-re
 ```
 
 - Errors:
-  - `400 bad_request`: malformed JSON; `elements` not an array, or `app_state`/`files` not objects, or a supplied optional field has the wrong type.
-  - `401 unauthenticated`: no valid auth.
-  - `404 not_found`: no active board with that `id`.
-  - `409 conflict`: `expected_scene_version` supplied and does not match current `scene_version`.
+ - `400 bad_request`: malformed JSON; `elements` not an array, or `app_state`/`files` not objects, or a supplied optional field has the wrong type.
+ - `401 unauthenticated`: no valid auth.
+ - `404 not_found`: no active board with that `id`.
+ - `409 conflict`: `expected_scene_version` supplied and does not match current `scene_version`.
 
 ---
 
@@ -1028,9 +1028,9 @@ Update board metadata only (no scene replace). Used by the rename and public-tog
 }
 ```
 
-  - `name` (string, optional): renames the board. Does NOT change the slug `id`. Max length 200 characters, non-empty after trimming.
-  - `is_public` (boolean, optional): toggles publish state.
-  - `is_deleted` (boolean, optional): the trash flag. Setting `is_deleted: false` is the trash-restore action (moves a board out of Trash). Setting `is_deleted: true` is equivalent to a soft delete. This is the ONE edit route allowed to target a soft-deleted board, specifically to flip `is_deleted` back to `false`; the board lookup for PATCH does not exclude soft-deleted rows.
+ - `name` (string, optional): renames the board. Does NOT change the slug `id`. Max length 200 characters, non-empty after trimming.
+ - `is_public` (boolean, optional): toggles publish state.
+ - `is_deleted` (boolean, optional): the trash flag. Setting `is_deleted: false` is the trash-restore action (moves a board out of Trash). Setting `is_deleted: true` is equivalent to a soft delete. This is the ONE edit route allowed to target a soft-deleted board, specifically to flip `is_deleted` back to `false`; the board lookup for PATCH does not exclude soft-deleted rows.
 
 - Behavior: a metadata-only update. It sets `updated_at = now()` (via the trigger). It does not touch the scene fields, does not bump `scene_version`, and does not write a snapshot (no scene state changed). At least one mutable field must be present. When `is_deleted: false` is supplied, the route looks up the board including soft-deleted rows so a trashed board can be restored.
 - Success: `200`. Returns the updated board (with rehydrated `files`):
@@ -1040,9 +1040,9 @@ Update board metadata only (no scene replace). Used by the rename and public-tog
 ```
 
 - Errors:
-  - `400 bad_request`: body empty (no mutable field supplied), or a supplied field has the wrong type, or `name` empty/whitespace or over 200 characters.
-  - `401 unauthenticated`: no valid auth.
-  - `404 not_found`: no board with that `id`. (For a `name`/`is_public`-only PATCH the lookup excludes soft-deleted rows, so a trashed board returns `404`; for an `is_deleted` change the lookup includes soft-deleted rows so restore works.)
+ - `400 bad_request`: body empty (no mutable field supplied), or a supplied field has the wrong type, or `name` empty/whitespace or over 200 characters.
+ - `401 unauthenticated`: no valid auth.
+ - `404 not_found`: no board with that `id`. (For a `name`/`is_public`-only PATCH the lookup excludes soft-deleted rows, so a trashed board returns `404`; for an `is_deleted` change the lookup includes soft-deleted rows so restore works.)
 
 ---
 
@@ -1054,11 +1054,11 @@ Delete a board. Soft delete by default (move to Trash); permanent delete with `?
 - Request headers: cookie or `Authorization: Bearer <secret>`.
 - Path params: `id` (string): the board slug.
 - Query params:
-  - `hard` (`"1"`, optional): when present, permanently deletes the board row and cascades its snapshots, and the route removes the board's Storage objects under `{board_id}/` via `deleteBoardImages` (A.9). When absent, soft delete only.
+ - `hard` (`"1"`, optional): when present, permanently deletes the board row and cascades its snapshots, and the route removes the board's Storage objects under `{board_id}/` via `deleteBoardImages` (A.9). When absent, soft delete only.
 - Body: none.
 - Behavior:
-  - Soft delete (default): sets `is_deleted = true` and `updated_at = now()`. The board moves to Trash and is no longer returned by active reads. Storage is untouched.
-  - Hard delete (`?hard=1`): removes the board row; `board_snapshots` cascade via the foreign key; the route also calls `deleteBoardImages(boardId)` to delete the Storage objects at `{board_id}/` (A.9).
+ - Soft delete (default): sets `is_deleted = true` and `updated_at = now()`. The board moves to Trash and is no longer returned by active reads. Storage is untouched.
+ - Hard delete (`?hard=1`): removes the board row; `board_snapshots` cascade via the foreign key; the route also calls `deleteBoardImages(boardId)` to delete the Storage objects at `{board_id}/` (A.9).
 - Success: `200`. Body:
 
 ```json
@@ -1068,9 +1068,9 @@ Delete a board. Soft delete by default (move to Trash); permanent delete with `?
   (`hard` reflects whether a permanent delete was performed.)
 
 - Errors:
-  - `400 bad_request`: `hard` present with a value other than `"1"`.
-  - `401 unauthenticated`: no valid auth.
-  - `404 not_found`: no board with that `id`. (A soft delete on an already soft-deleted board returns `404`; a hard delete can still target a Trash board, since Trash boards exist in the row.)
+ - `400 bad_request`: `hard` present with a value other than `"1"`.
+ - `401 unauthenticated`: no valid auth.
+ - `404 not_found`: no board with that `id`. (A soft delete on an already soft-deleted board returns `404`; a hard delete can still target a Trash board, since Trash boards exist in the row.)
 
 ---
 
@@ -1091,8 +1091,8 @@ Granular add. Appends one or more full Excalidraw element objects to the board.
 }
 ```
 
-  - `elements` (array, required): full Excalidraw element objects, each with its own `id`, `type`, geometry, and style. These are appended to the existing `boards.elements`.
-  - `expected_scene_version` (number, optional): same `409` semantics as on PUT.
+ - `elements` (array, required): full Excalidraw element objects, each with its own `id`, `type`, geometry, and style. These are appended to the existing `boards.elements`.
+ - `expected_scene_version` (number, optional): same `409` semantics as on PUT.
 
 - Z-order: array order is z-order in Excalidraw (later elements draw on top). New elements are appended to the end of the existing `elements` array, so they land on top of everything already on the board, in the order given in the request. The server does not reorder them.
 - Behavior: reads the current `elements`, appends the new ones, then calls `save_board_scene` (A.8), which snapshots prior state and bumps `scene_version` by 1; `updated_at` is set by the trigger. (If any appended element carries inline image `files`, run `extractAndStoreImages` on the merged `files` map first.)
@@ -1106,10 +1106,10 @@ Granular add. Appends one or more full Excalidraw element objects to the board.
 ```
 
 - Errors:
-  - `400 bad_request`: `elements` missing, not an array, empty, or an element is missing a required field such as `id`.
-  - `401 unauthenticated`: no valid auth.
-  - `404 not_found`: no active board with that `id`.
-  - `409 conflict`: `expected_scene_version` supplied and does not match.
+ - `400 bad_request`: `elements` missing, not an array, empty, or an element is missing a required field such as `id`.
+ - `401 unauthenticated`: no valid auth.
+ - `404 not_found`: no active board with that `id`.
+ - `409 conflict`: `expected_scene_version` supplied and does not match.
 
 ---
 
@@ -1132,8 +1132,8 @@ Granular update. Patches existing elements by their `id` with partial fields.
 }
 ```
 
-  - `updates` (array, required): each entry must contain an `id` identifying an existing element, plus any subset of element fields to merge over that element.
-  - `expected_scene_version` (number, optional): same `409` semantics as on PUT.
+ - `updates` (array, required): each entry must contain an `id` identifying an existing element, plus any subset of element fields to merge over that element.
+ - `expected_scene_version` (number, optional): same `409` semantics as on PUT.
 
 - Merge semantics: the merge is a SHALLOW top-level key overwrite. Supplied keys replace the matching keys on the element; omitted keys are left unchanged. Nested objects and arrays (for example `points`, `boundElements`, `groupIds`) are replaced wholesale, not deep-merged, so a caller changing any of them MUST send the full nested array/object, or the existing one is clobbered. Z-order (array position) is not changed by a patch unless a supplied key moves the element. The server does not bump each element's `version`/`versionNonce`/`updated` reconciliation fields; the caller should include them in the patch if Excalidraw reconciliation order matters.
 - Behavior: reads current `elements`, merges each update into the element with the matching `id`, then calls `save_board_scene` (A.8) to snapshot and bump `scene_version` by 1. Any `id` in `updates` that does not match an existing element is rejected with `400` and no write is committed (atomic: all-or-nothing).
@@ -1147,10 +1147,10 @@ Granular update. Patches existing elements by their `id` with partial fields.
 ```
 
 - Errors:
-  - `400 bad_request`: `updates` missing, not an array, empty, or an entry is missing `id`; or an `id` in `updates` matches no element on the board.
-  - `401 unauthenticated`: no valid auth.
-  - `404 not_found`: no active board with that `id`.
-  - `409 conflict`: `expected_scene_version` supplied and does not match.
+ - `400 bad_request`: `updates` missing, not an array, empty, or an entry is missing `id`; or an `id` in `updates` matches no element on the board.
+ - `401 unauthenticated`: no valid auth.
+ - `404 not_found`: no active board with that `id`.
+ - `409 conflict`: `expected_scene_version` supplied and does not match.
 
 ---
 
@@ -1171,8 +1171,8 @@ Granular delete. Removes elements by `id`.
 }
 ```
 
-  - `ids` (array of strings, required): the element ids to remove from `boards.elements`. Ids that are not present on the board are ignored (delete is idempotent), so a request to delete an already-removed id still succeeds.
-  - `expected_scene_version` (number, optional): same `409` semantics as on PUT.
+ - `ids` (array of strings, required): the element ids to remove from `boards.elements`. Ids that are not present on the board are ignored (delete is idempotent), so a request to delete an already-removed id still succeeds.
+ - `expected_scene_version` (number, optional): same `409` semantics as on PUT.
 
 - Behavior: reads current `elements`, removes the matching elements (preserving the order of the rest), then calls `save_board_scene` (A.8) to snapshot and bump `scene_version` by 1. Per the orphan policy (A.7), removing an image element here does NOT delete its Storage object.
 - Success: `200`. Returns the new version, the updated board (with rehydrated `files`), and how many were actually removed:
@@ -1186,10 +1186,10 @@ Granular delete. Removes elements by `id`.
 ```
 
 - Errors:
-  - `400 bad_request`: `ids` missing, not an array, empty, or contains a non-string.
-  - `401 unauthenticated`: no valid auth.
-  - `404 not_found`: no active board with that `id`.
-  - `409 conflict`: `expected_scene_version` supplied and does not match.
+ - `400 bad_request`: `ids` missing, not an array, empty, or contains a non-string.
+ - `401 unauthenticated`: no valid auth.
+ - `404 not_found`: no active board with that `id`.
+ - `409 conflict`: `expected_scene_version` supplied and does not match.
 
 ---
 
@@ -1201,7 +1201,7 @@ List the history snapshots for a board, newest first. Backs the editor's history
 - Request headers: cookie or `Authorization: Bearer <secret>`.
 - Path params: `id` (string): the board slug.
 - Query params:
-  - `limit` (number, optional, default 50, max 50): max snapshots to return. Values above 50 are clamped to 50. Retention already bounds the stored set to the last 30 days plus the most recent 50 per board, so a default of 50 returns the full retained set in the common case.
+ - `limit` (number, optional, default 50, max 50): max snapshots to return. Values above 50 are clamped to 50. Retention already bounds the stored set to the last 30 days plus the most recent 50 per board, so a default of 50 returns the full retained set in the common case.
 - Body: none.
 - Success: `200`. Returns snapshot metadata, ordered by `created_at` descending (matching the `(board_id, created_at desc)` index). The heavy `elements`, `app_state`, and `files` are omitted from the list to keep it light:
 
@@ -1221,9 +1221,9 @@ List the history snapshots for a board, newest first. Backs the editor's history
   (The current live board state is NOT itself a snapshot row. The history drawer's "now" entry is synthesized client-side from `GET /api/boards/[id]`; see C.)
 
 - Errors:
-  - `400 bad_request`: `limit` present and not a positive integer.
-  - `401 unauthenticated`: no valid auth.
-  - `404 not_found`: no active board with that `id`.
+ - `400 bad_request`: `limit` present and not a positive integer.
+ - `401 unauthenticated`: no valid auth.
+ - `404 not_found`: no active board with that `id`.
 
 ---
 
@@ -1234,8 +1234,8 @@ Restore a board to a prior snapshot. The current state is snapshotted first (so 
 - Auth: required.
 - Request headers: cookie or `Authorization: Bearer <secret>`.
 - Path params:
-  - `id` (string): the board slug.
-  - `snapId` (uuid): the `board_snapshots.id` to restore from. Must belong to this board.
+ - `id` (string): the board slug.
+ - `snapId` (uuid): the `board_snapshots.id` to restore from. Must belong to this board.
 - Query params: none.
 - Body: none.
 - Behavior: reads the chosen snapshot row, then calls `save_board_scene` (A.8) with that snapshot's `elements`, `app_state`, and `files`, which snapshots the current state into `board_snapshots`, writes the snapshot's scene onto the board, and bumps `scene_version` by 1; the trigger sets `updated_at = now()`.
@@ -1249,8 +1249,8 @@ Restore a board to a prior snapshot. The current state is snapshotted first (so 
 ```
 
 - Errors:
-  - `401 unauthenticated`: no valid auth.
-  - `404 not_found`: no active board with that `id`, or no snapshot with `snapId`, or the snapshot exists but belongs to a different board.
+ - `401 unauthenticated`: no valid auth.
+ - `404 not_found`: no active board with that `id`, or no snapshot with `snapId`, or the snapshot exists but belongs to a different board.
 
 ---
 
@@ -1279,9 +1279,9 @@ Create a NEW board from an uploaded `.excalidraw` file (or equivalent JSON body)
 - Behavior: creates a new board the same way `POST /api/boards` does (slug generation with the bounded retry, unique `share_token`, `scene_version = 0`, `is_public` default `true`), populated from the imported scene.
 - Success: `201`. Returns the full created board (same shape as `POST /api/boards`, with rehydrated `files`).
 - Errors:
-  - `400 bad_request`: body is not valid Excalidraw JSON, `type` is not `"excalidraw"`, `elements` is not an array, the multipart `file` field is missing, or the file exceeds 5 MB.
-  - `401 unauthenticated`: no valid auth.
-  - `409 conflict`: could not generate a unique slug.
+ - `400 bad_request`: body is not valid Excalidraw JSON, `type` is not `"excalidraw"`, `elements` is not an array, the multipart `file` field is missing, or the file exceeds 5 MB.
+ - `401 unauthenticated`: no valid auth.
+ - `409 conflict`: could not generate a unique slug.
 
 ---
 
@@ -1309,14 +1309,14 @@ Download a board as a `.excalidraw` file, identical format to real Excalidraw.
 ```
 
   Response headers:
-  - `Content-Type: application/json` (the route may use `application/vnd.excalidraw+json`; plain `application/json` is fine since the file is JSON).
-  - `Content-Disposition: attachment; filename="<slug>.excalidraw"`.
+ - `Content-Type: application/json` (the route may use `application/vnd.excalidraw+json`; plain `application/json` is fine since the file is JSON).
+ - `Content-Disposition: attachment; filename="<slug>.excalidraw"`.
 
   (`elements` come straight from the board; `files` is the rehydrated full map; `appState` is mapped from `boards.app_state`.)
 
 - Errors:
-  - `401 unauthenticated`: board is private and no valid auth was supplied.
-  - `404 not_found`: no active board with that `id`.
+ - `401 unauthenticated`: board is private and no valid auth was supplied.
+ - `404 not_found`: no active board with that `id`.
 
 ---
 
@@ -1347,7 +1347,7 @@ Read-only public view of a board by its share token. Backs the `/v/[token]` page
 ```
 
 - Errors:
-  - `404 not_found`: no board matches the token, OR the matched board is soft-deleted, OR the matched board has `is_public = false` (the owner toggled sharing off or rotated the token). All three return `404` so the response never confirms whether a token exists. There is no `403` branch on this endpoint.
+ - `404 not_found`: no board matches the token, OR the matched board is soft-deleted, OR the matched board has `is_public = false` (the owner toggled sharing off or rotated the token). All three return `404` so the response never confirms whether a token exists. There is no `403` branch on this endpoint.
 
 ---
 
@@ -1368,12 +1368,12 @@ Rotate a board's `share_token`, invalidating the old `/v/[token]` link.
 ```
 
 - Errors:
-  - `401 unauthenticated`: no valid auth.
-  - `404 not_found`: no active board with that `id`.
+ - `401 unauthenticated`: no valid auth.
+ - `404 not_found`: no active board with that `id`.
 
 ## C. Page layouts (text wireframes)
 
-Theme (as-built): the app defaults to **light** and has a **dark-mode toggle on the dashboard** that applies app-wide (persisted in `localStorage`, no device-preference follow). The wireframes below show the light-mode chrome; the same layout renders in dark mode with inverted colors. Desktop layout only. (The original plan called for following the device `prefers-color-scheme` with no toggle; that was superseded — see "Current state".)
+Theme (as-built): the app defaults to **light** and has a **dark-mode toggle on the dashboard** that applies app-wide (persisted in `localStorage`, no device-preference follow). The wireframes below show the light-mode chrome; the same layout renders in dark mode with inverted colors. Desktop layout only. (The original plan called for following the device `prefers-color-scheme` with no toggle; that was superseded - see "Current state".)
 
 View links (the `/v/<share_token>` URLs copied by the dashboard and the editor) are always built from `window.location.origin` at click time, so they work on production and on Vercel preview deploys without a hardcoded host or env base URL.
 
@@ -1485,7 +1485,7 @@ Behavior:
 - Top bar (left to right): a Back link to `/`, an editable board name field, a Public toggle, a Copy link button, then Import, Export, and History. A save status indicator sits at the right ("Saved", "Saving...", or "Save failed").
 - The canvas is the `@excalidraw/excalidraw` component filling the rest of the page. Its own toolbar (text, shapes, draw, arrow, etc.) is on the left, owned by the component.
 - The board loads from `GET /api/boards/[id]` (elements, app_state, files). The server has already run `rehydrateImages`, so `files` arrives as the full map with `dataURL`s and is passed to the component as `initialData.files`.
-- Autosave: edits are debounced about 1 to 2 seconds after the last Excalidraw `onChange`, then the full scene is written with `PUT /api/boards/[id]`. To avoid flooding `board_snapshots`, a save is skipped when `elements` and `files` are unchanged since the last save (app_state-only churn like cursor, selection, scroll, or zoom does NOT trigger a PUT; only the persisted app_state allowlist from A.10 is considered savable). Saves are serialized: if a new debounced save fires while a PUT is in flight, it is queued and only the latest scene is sent, so an older payload never overwrites a newer one. Latest save wins, and the server snapshots the prior state into board_snapshots before applying. The indicator reads "Saving..." during the call and "Saved" after. As-built, saves read the scene captured from the latest `onChange` (never from the Excalidraw API, which returns an empty scene once unmounted), the pending debounce is cleared on unmount, and leaving the editor (e.g. "‹ Back") flushes a final save of the captured scene — this is the fix for the blank-on-exit data-loss bug (see "Current state").
+- Autosave: edits are debounced about 1 to 2 seconds after the last Excalidraw `onChange`, then the full scene is written with `PUT /api/boards/[id]`. To avoid flooding `board_snapshots`, a save is skipped when `elements` and `files` are unchanged since the last save (app_state-only churn like cursor, selection, scroll, or zoom does NOT trigger a PUT; only the persisted app_state allowlist from A.10 is considered savable). Saves are serialized: if a new debounced save fires while a PUT is in flight, it is queued and only the latest scene is sent, so an older payload never overwrites a newer one. Latest save wins, and the server snapshots the prior state into board_snapshots before applying. The indicator reads "Saving..." during the call and "Saved" after. As-built, saves read the scene captured from the latest `onChange` (never from the Excalidraw API, which returns an empty scene once unmounted), the pending debounce is cleared on unmount, and leaving the editor (e.g. "< Back") flushes a final save of the captured scene - this is the fix for the blank-on-exit data-loss bug (see "Current state").
 - Board name: editing the field and blurring (or pressing Enter) saves via `PATCH /api/boards/[id]` (name only).
 - Public toggle: flipping it calls `PATCH /api/boards/[id]` with `{ "is_public": ... }`. Copy link builds `${window.location.origin}/v/<share_token>` and copies it. A separate rotate action (in a small menu by Copy link) calls `POST /api/boards/[id]/rotate-token`; the route returns the new `share_token`, which is stored in local state so the next Copy link uses the fresh token, and the old link stops working.
 - Export downloads a `.excalidraw` file from `GET /api/boards/[id]/export`, identical to real Excalidraw format (the server rehydrates images so the file embeds full image bytes).

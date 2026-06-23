@@ -7,7 +7,7 @@ import { validateName, expectArray, expectObject, expectBoolean } from "@/lib/va
 
 type SummaryRow = Omit<BoardRow, "elements" | "app_state" | "files">;
 
-// GET /api/boards — list active boards (or trash) for the dashboard, recent-first.
+// GET /api/boards - list active boards (or trash) for the dashboard, recent-first.
 export async function GET(req: NextRequest) {
   return handle(async () => {
     requireAuth(req);
@@ -37,7 +37,7 @@ export async function GET(req: NextRequest) {
   });
 }
 
-// POST /api/boards — create a board.
+// POST /api/boards - create a board.
 export async function POST(req: NextRequest) {
   return handle(async () => {
     requireAuth(req);

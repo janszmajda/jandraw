@@ -7,14 +7,14 @@ import { sanitizeAppState } from "@/lib/appState";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// GET /api/boards/[id]/export — download a .excalidraw file (real Excalidraw format).
+// GET /api/boards/[id]/export - download a .excalidraw file (real Excalidraw format).
 // Public if the board is public; otherwise requires auth. Images are rehydrated so
 // the file embeds full dataURLs and opens in real Excalidraw.
 export async function GET(req: NextRequest, ctx: Ctx) {
   return handle(async () => {
     const { id } = await ctx.params;
     const row = await fetchActiveBoardRow(id); // 404 if missing / soft-deleted
-    if (!row.is_public) requireAuth(req); // private board → must be authed (else 401)
+    if (!row.is_public) requireAuth(req); // private board -> must be authed (else 401)
 
     const file = {
       type: "excalidraw",

@@ -6,7 +6,7 @@ import { isPlainObject, validateName } from "@/lib/validate";
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 
-// POST /api/boards/import — create a NEW board from a .excalidraw file (multipart
+// POST /api/boards/import - create a NEW board from a .excalidraw file (multipart
 // `file` field) or an equivalent JSON body. Never overwrites an existing board.
 export async function POST(req: NextRequest) {
   return handle(async () => {

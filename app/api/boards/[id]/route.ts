@@ -22,7 +22,7 @@ import {
 
 type Ctx = { params: Promise<{ id: string }> };
 
-// GET /api/boards/[id] — full owner view of one active board. Requires auth.
+// GET /api/boards/[id] - full owner view of one active board. Requires auth.
 export async function GET(req: NextRequest, ctx: Ctx) {
   return handle(async () => {
     requireAuth(req);
@@ -32,7 +32,7 @@ export async function GET(req: NextRequest, ctx: Ctx) {
   });
 }
 
-// PUT /api/boards/[id] — full-board replace (editor autosave + import-to-replace).
+// PUT /api/boards/[id] - full-board replace (editor autosave + import-to-replace).
 // Snapshots prior state, bumps scene_version. name/is_public updated in the same write.
 export async function PUT(req: NextRequest, ctx: Ctx) {
   return handle(async () => {
@@ -89,7 +89,7 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
   });
 }
 
-// PATCH /api/boards/[id] — metadata only (rename, public toggle, trash/restore).
+// PATCH /api/boards/[id] - metadata only (rename, public toggle, trash/restore).
 // No scene write, no snapshot, no version bump.
 export async function PATCH(req: NextRequest, ctx: Ctx) {
   return handle(async () => {
@@ -119,8 +119,8 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     // Only an is_deleted change is allowed to reach a soft-deleted (trashed) board.
     const row = hasDeleted ? await fetchAnyBoardRow(id) : await fetchActiveBoardRow(id);
     if (row.is_deleted && (hasName || hasPublic)) {
-      // A trashed board may only have its is_deleted flag flipped — not be renamed or
-      // re-published — even when those fields are bundled with is_deleted.
+      // A trashed board may only have its is_deleted flag flipped - not be renamed or
+      // re-published - even when those fields are bundled with is_deleted.
       throw new HttpError("not_found", "Board not found.");
     }
 
@@ -136,7 +136,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
   });
 }
 
-// DELETE /api/boards/[id] — soft delete by default; ?hard=1 permanently deletes
+// DELETE /api/boards/[id] - soft delete by default; ?hard=1 permanently deletes
 // (cascades snapshots, removes Storage objects).
 export async function DELETE(req: NextRequest, ctx: Ctx) {
   return handle(async () => {

@@ -109,7 +109,7 @@ export function requireAuth(req: NextRequest): void {
 export async function isAuthedFromCookies(): Promise<boolean> {
   // Fail closed: if the secret is unset/misconfigured (getSecret throws inside
   // verifySessionValue), treat the request as unauthenticated so the page redirects
-  // to /login instead of 500-ing — and /login itself stays reachable.
+  // to /login instead of 500-ing - and /login itself stays reachable.
   try {
     const store = await cookies();
     return verifySessionValue(store.get(SESSION_COOKIE)?.value);

@@ -13,7 +13,7 @@ type SnapshotScene = {
   files: Record<string, Record<string, unknown>>;
 };
 
-// POST /api/boards/[id]/restore/[snapId] — restore a snapshot. The current state is
+// POST /api/boards/[id]/restore/[snapId] - restore a snapshot. The current state is
 // snapshotted first (via save_board_scene), so a restore is itself undoable.
 export async function POST(req: NextRequest, ctx: Ctx) {
   return handle(async () => {
