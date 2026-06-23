@@ -84,7 +84,6 @@ export default function Editor({ boardId }: { boardId: string }) {
     appState: Record<string, unknown>;
     files: Record<string, unknown>;
   } | null>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ---- Load the board scene once ----
   useEffect(() => {
@@ -377,44 +376,6 @@ export default function Editor({ boardId }: { boardId: string }) {
     }
   }
 
-  async function onImportFile(file: File) {
-    try {
-      const { loadFromBlob } = await import("@excalidraw/excalidraw");
-      const scene = await loadFromBlob(file, null, null);
-      const api = apiRef.current;
-      if (!api) return;
-      // Suspend autosave while swapping the scene; let any in-flight save land first so
-      // it can't clobber the replacement, and drop any queued save.
-      setSuspend(true);
-      if (debounceRef.current) clearTimeout(debounceRef.current);
-      pendingRef.current = false;
-      if (inFlightRef.current) {
-        try {
-          await inFlightRef.current;
-        } catch {
-          /* ignore */
-        }
-      }
-      api.updateScene({ elements: scene.elements, appState: scene.appState });
-      if (scene.files) api.addFiles(Object.values(scene.files));
-      // Adopt the imported scene as the baseline so the async onChange updateScene fires
-      // is recognized as a no-op; the explicit doSave below is the single write.
-      lastSavedSigRef.current = computeSig(api.getSceneElements(), api.getAppState(), api.getFiles());
-      // Keep latestSceneRef on the imported scene too, so a Back-nav unmount-flush can't
-      // resurrect the pre-import scene.
-      latestSceneRef.current = {
-        elements: api.getSceneElements(),
-        appState: api.getAppState(),
-        files: api.getFiles(),
-      };
-      setSuspend(false);
-      void doSave(); // persist the imported replacement via PUT
-    } catch {
-      setSuspend(false);
-      setSaveStatus("failed");
-    }
-  }
-
   async function openHistory() {
     setShowHistory(true);
     setSnapshotsLoading(true);
@@ -567,12 +528,6 @@ export default function Editor({ boardId }: { boardId: string }) {
           )}
         </div>
 
-        <button onClick={() => fileInputRef.current?.click()} className={barBtn}>
-          Import
-        </button>
-        <a href={`/api/boards/${boardId}/export`} download className={barBtn}>
-          Export
-        </a>
         <button onClick={openHistory} className={barBtn}>
           History
         </button>
@@ -588,18 +543,6 @@ export default function Editor({ boardId }: { boardId: string }) {
             </button>
           )}
         </span>
-
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept=".excalidraw,application/json"
-          className="hidden"
-          onChange={(e) => {
-            const f = e.target.files?.[0];
-            if (f) void onImportFile(f);
-            e.target.value = "";
-          }}
-        />
       </header>
 
       {/* Canvas + history drawer */}
