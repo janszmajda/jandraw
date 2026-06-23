@@ -12,7 +12,7 @@ export async function POST(req: NextRequest) {
   return handle(async () => {
     requireAuth(req);
 
-    const contentType = req.headers.get("content-type") || "";
+    const contentType = (req.headers.get("content-type") || "").toLowerCase(); // media types are case-insensitive
     let scene: unknown;
     let fallbackName: string | undefined;
 
@@ -43,7 +43,16 @@ export async function POST(req: NextRequest) {
         fallbackName = file.name.replace(/\.(excalidraw|json)$/i, "");
       }
     } else {
-      scene = await readJson(req);
+      // JSON body path: enforce the same 5 MB cap as multipart (readJson/req.json have none).
+      const text = await req.text();
+      if (Buffer.byteLength(text, "utf8") > MAX_BYTES) {
+        throw new HttpError("bad_request", "File exceeds the 5 MB limit.");
+      }
+      try {
+        scene = JSON.parse(text);
+      } catch {
+        throw new HttpError("bad_request", "Body is not valid JSON.");
+      }
     }
 
     if (!isPlainObject(scene)) {

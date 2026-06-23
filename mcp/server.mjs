@@ -43,7 +43,11 @@ function loadEnvFallback() {
         if (isWrapped(raw)) {
           val = raw.slice(1, -1);
         } else {
-          const stripped = raw.replace(/\s+#.*$/, "");
+          // Match @next/env and `node --env-file`: an unquoted '#' starts a comment even
+          // with no preceding whitespace, so cut at the first '#'. (Keeps the MCP's view
+          // of the secret/URL identical to the Next server's, avoiding 401/parse drift.)
+          const hash = raw.indexOf("#");
+          const stripped = (hash === -1 ? raw : raw.slice(0, hash)).trimEnd();
           val = isWrapped(stripped) ? stripped.slice(1, -1) : stripped;
         }
         process.env[m[1]] = val;

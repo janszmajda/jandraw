@@ -56,6 +56,7 @@ export default function Editor({ boardId }: { boardId: string }) {
   const [isPublic, setIsPublic] = useState(true);
   const [shareToken, setShareToken] = useState("");
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("saved");
+  const [suspended, setSuspended] = useState(false); // locks the canvas during restore/import
   const [copied, setCopied] = useState(false);
   const [rotateOpen, setRotateOpen] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
@@ -110,6 +111,13 @@ export default function Editor({ boardId }: { boardId: string }) {
   useEffect(() => {
     nameRef.current = name;
   }, [name]);
+
+  // Suspend autosave (ref, read synchronously) AND lock the canvas (state -> viewModeEnabled)
+  // so the user can't draw into a scene that restore/import is about to replace.
+  const setSuspend = (v: boolean) => {
+    suspendRef.current = v;
+    setSuspended(v);
+  };
 
   // ---- Autosave (serialized, latest-wins) ----
   const doSave = useCallback(async () => {
@@ -186,7 +194,7 @@ export default function Editor({ boardId }: { boardId: string }) {
 
   // ---- Save on tab blur / close ----
   useEffect(() => {
-    const flush = () => {
+    const flush = (isClosing: boolean) => {
       if (!readyRef.current) return;
       const api = apiRef.current;
       if (!api) return;
@@ -215,20 +223,20 @@ export default function Editor({ boardId }: { boardId: string }) {
       const files = api.getFiles();
       const sig = computeSig(elements, appState, files);
       if (sig === lastSavedSigRef.current) return;
-      // If a debounced save is already in flight, defer to doSave's serialization instead
-      // of racing a second concurrent PUT (which could commit out of order / double-snapshot).
-      if (savingRef.current || inFlightRef.current) {
+
+      // On a tab BLUR (page survives) with a save already in flight, defer to doSave's
+      // serialization so we don't race a second concurrent PUT. On a real CLOSE there is
+      // no "later" — the in-flight non-keepalive PUT is cancelled by the unload — so send
+      // the latest scene now via keepalive instead of deferring to a doomed re-run.
+      if (!isClosing && (savingRef.current || inFlightRef.current)) {
         pendingRef.current = true;
         return;
       }
+
       const body = JSON.stringify({ elements, app_state: appState, files });
-      // keepalive bodies are capped at ~64KB measured in BYTES (not UTF-16 units), so
-      // size it with TextEncoder. Under the cap, use keepalive so the save survives a
-      // tab close, recording "saved" only on a confirmed res.ok. Over the cap there is no
-      // reliable close-time transport, so fall back to a normal save — it completes on a
-      // tab blur (page survives); an edit made <1.5s before fully closing a >64KB board
-      // is the one unavoidable gap (would need decoupling image bytes from the PUT).
+      // keepalive bodies are capped at ~64KB measured in BYTES; size with TextEncoder.
       if (new TextEncoder().encode(body).length < 60000) {
+        const baseline = lastSavedSigRef.current;
         fetch(`/api/boards/${boardId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -236,20 +244,31 @@ export default function Editor({ boardId }: { boardId: string }) {
           keepalive: true,
         })
           .then((res) => {
-            if (res.ok) lastSavedSigRef.current = sig;
+            if (res.ok) {
+              // advance the baseline only if nothing superseded it (a later save, an
+              // import, or a restore) — never clobber a newer baseline with a stale sig.
+              if (lastSavedSigRef.current === baseline && !suspendRef.current) {
+                lastSavedSigRef.current = sig;
+              }
+            } else {
+              setSaveStatus("failed"); // surface failure so the Retry affordance appears
+            }
           })
-          .catch(() => {});
-      } else {
+          .catch(() => setSaveStatus("failed"));
+      } else if (!isClosing) {
+        // Over the keepalive cap but the page survives (blur): a normal save completes.
         void doSave();
       }
+      // else: closing + over-cap → unavoidable gap (browser keepalive limit; documented).
     };
+    const onBeforeUnload = () => flush(true);
     const onVisibility = () => {
-      if (document.visibilityState === "hidden") flush();
+      if (document.visibilityState === "hidden") flush(false);
     };
-    window.addEventListener("beforeunload", flush);
+    window.addEventListener("beforeunload", onBeforeUnload);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
-      window.removeEventListener("beforeunload", flush);
+      window.removeEventListener("beforeunload", onBeforeUnload);
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [boardId, doSave]);
@@ -321,7 +340,7 @@ export default function Editor({ boardId }: { boardId: string }) {
       if (!api) return;
       // Suspend autosave while swapping the scene; let any in-flight save land first so
       // it can't clobber the replacement, and drop any queued save.
-      suspendRef.current = true;
+      setSuspend(true);
       if (debounceRef.current) clearTimeout(debounceRef.current);
       pendingRef.current = false;
       if (inFlightRef.current) {
@@ -336,10 +355,10 @@ export default function Editor({ boardId }: { boardId: string }) {
       // Adopt the imported scene as the baseline so the async onChange updateScene fires
       // is recognized as a no-op; the explicit doSave below is the single write.
       lastSavedSigRef.current = computeSig(api.getSceneElements(), api.getAppState(), api.getFiles());
-      suspendRef.current = false;
+      setSuspend(false);
       void doSave(); // persist the imported replacement via PUT
     } catch {
-      suspendRef.current = false;
+      setSuspend(false);
       setSaveStatus("failed");
     }
   }
@@ -391,7 +410,7 @@ export default function Editor({ boardId }: { boardId: string }) {
     } catch {
       setSaveStatus("failed");
     } finally {
-      suspendRef.current = false;
+      setSuspend(false);
     }
   }
 
@@ -511,6 +530,7 @@ export default function Editor({ boardId }: { boardId: string }) {
         {initialData != null && (
           <ExcalidrawCanvas
             theme={theme}
+            viewModeEnabled={suspended}
             initialData={initialData as never}
             onChange={onChange as never}
             excalidrawAPI={(api: unknown) => {

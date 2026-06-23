@@ -44,9 +44,12 @@ function isMissingObject(e: unknown): boolean {
 }
 
 // Runs before any board write that carries a files map (PUT, element ops, import).
-// Uploads new inline images and returns a reference-only map. Enforces that a
-// `stored: true` reference always has a backing Storage object (so reads can't brick
-// the board) and never persists a dataURL.
+// Uploads new inline images and returns a reference-only map (never persists a dataURL).
+// A new image (dataURL) is always uploaded before it is marked stored. A `stored: true`
+// entry already present in the input is trusted as-is and NOT existence-verified — this
+// is the legitimate path for restore/element-ops (refs from our own DB); a bogus
+// client-supplied stored ref with no object simply degrades on read (image dropped),
+// it does not brick the board.
 export async function extractAndStoreImages(boardId: string, files: FilesMap): Promise<FilesMap> {
   const out: FilesMap = {};
 

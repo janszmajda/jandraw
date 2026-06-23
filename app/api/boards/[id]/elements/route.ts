@@ -1,24 +1,31 @@
 import type { NextRequest } from "next/server";
 import { handle, apiOk, readJson, HttpError } from "@/lib/http";
 import { requireAuth } from "@/lib/auth";
-import { fetchActiveBoardRow, toFullBoardSafe, saveScene } from "@/lib/boards";
+import { fetchActiveBoardRow, fetchAnyBoardRow, toFullBoardSafe, saveScene } from "@/lib/boards";
 import { expectArray, assertVersion, isPlainObject } from "@/lib/validate";
 
 type Ctx = { params: Promise<{ id: string }> };
 
-function currentElements(row: { elements: unknown }): Record<string, unknown>[] {
-  // Keep only plain objects with a string id — a stored null/non-object element (from a
-  // PUT/import that doesn't deep-validate element contents) must not crash String(e.id).
-  return (Array.isArray(row.elements) ? row.elements : []).filter(
-    (e): e is Record<string, unknown> =>
-      typeof e === "object" &&
-      e !== null &&
-      !Array.isArray(e) &&
-      typeof (e as Record<string, unknown>).id === "string",
-  );
+// The raw stored elements array, preserved verbatim. Element ops rewrite the WHOLE array,
+// so we must NOT drop entries we don't recognize: PUT/import don't deep-validate element
+// contents, so a null / non-object / non-string-id entry can legitimately be stored. We
+// act only on entries that have a string id; everything else passes through untouched.
+function rawElements(row: { elements: unknown }): unknown[] {
+  return Array.isArray(row.elements) ? row.elements : [];
 }
+function elemId(e: unknown): string | null {
+  return e !== null &&
+    typeof e === "object" &&
+    !Array.isArray(e) &&
+    typeof (e as Record<string, unknown>).id === "string"
+    ? ((e as Record<string, unknown>).id as string)
+    : null;
+}
+const stringIds = (els: unknown[]): Set<string> =>
+  new Set(els.map(elemId).filter((x): x is string => x !== null));
 
-// POST /api/boards/[id]/elements — append elements (land on top, in given order).
+// POST /api/boards/[id]/elements — append NEW elements on top (append-only). An id that
+// already exists is rejected (use PATCH); duplicate ids WITHIN the request collapse.
 export async function POST(req: NextRequest, ctx: Ctx) {
   return handle(async () => {
     requireAuth(req);
@@ -40,29 +47,25 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       typeof body.expected_scene_version === "number" ? body.expected_scene_version : undefined;
     assertVersion(body.expected_scene_version, Number(row.scene_version));
 
-    // POST is append-only: it adds NEW elements on top. Reject any incoming id that
-    // already exists (the caller should PATCH to edit) so we never silently replace an
-    // element or change its z-order. Duplicate ids WITHIN the request collapse (last-wins).
     const incomingById = new Map(
       incoming.map((e) => [String((e as Record<string, unknown>).id), e]),
     );
-    const current = currentElements(row);
-    const existingIds = new Set(current.map((e) => String(e.id)));
+    const current = rawElements(row);
+    const existingIds = stringIds(current);
     for (const eid of incomingById.keys()) {
       if (existingIds.has(eid)) {
         throw new HttpError("bad_request", `Element ${eid} already exists; use PATCH to update it.`);
       }
     }
-    const merged = [...current, ...incomingById.values()];
+    const merged = [...current, ...incomingById.values()]; // preserves every existing entry
     await saveScene(id, merged, row.app_state, row.files, expected);
-    const fresh = await fetchActiveBoardRow(id);
-    const board = await toFullBoardSafe(fresh);
+    const board = await toFullBoardSafe(await fetchAnyBoardRow(id));
     return apiOk({ scene_version: board.scene_version, board });
   });
 }
 
-// PATCH /api/boards/[id]/elements — shallow-merge partial updates by id (atomic;
-// any unknown id rejects the whole request with 400).
+// PATCH /api/boards/[id]/elements — shallow-merge partial updates by id (atomic; any
+// unknown id rejects the whole request with 400). Unrecognized entries pass through.
 export async function PATCH(req: NextRequest, ctx: Ctx) {
   return handle(async () => {
     requireAuth(req);
@@ -86,8 +89,8 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       typeof body.expected_scene_version === "number" ? body.expected_scene_version : undefined;
     assertVersion(body.expected_scene_version, Number(row.scene_version));
 
-    const current = currentElements(row);
-    const existingIds = new Set(current.map((e) => String(e.id)));
+    const current = rawElements(row);
+    const existingIds = stringIds(current);
     for (const uid of byId.keys()) {
       if (!existingIds.has(uid)) {
         throw new HttpError("bad_request", `No element with id ${uid} on this board.`);
@@ -95,18 +98,18 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     }
 
     const merged = current.map((e) => {
-      const u = byId.get(String(e.id));
-      return u ? { ...e, ...u } : e; // shallow top-level overwrite
+      const eid = elemId(e);
+      const u = eid !== null ? byId.get(eid) : undefined;
+      return u ? { ...(e as Record<string, unknown>), ...u } : e; // shallow overwrite; others untouched
     });
     await saveScene(id, merged, row.app_state, row.files, expected);
-    const fresh = await fetchActiveBoardRow(id);
-    const board = await toFullBoardSafe(fresh);
+    const board = await toFullBoardSafe(await fetchAnyBoardRow(id));
     return apiOk({ scene_version: board.scene_version, board });
   });
 }
 
-// DELETE /api/boards/[id]/elements — remove elements by id (idempotent). Per the
-// orphan policy, removing an image element does NOT delete its Storage object.
+// DELETE /api/boards/[id]/elements — remove elements by id (idempotent). Per the orphan
+// policy, removing an image element does NOT delete its Storage object.
 export async function DELETE(req: NextRequest, ctx: Ctx) {
   return handle(async () => {
     requireAuth(req);
@@ -129,13 +132,15 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
     assertVersion(body.expected_scene_version, Number(row.scene_version));
 
     const idSet = new Set(ids as string[]);
-    const current = currentElements(row);
-    const remaining = current.filter((e) => !idSet.has(String(e.id)));
+    const current = rawElements(row);
+    const remaining = current.filter((e) => {
+      const eid = elemId(e);
+      return !(eid !== null && idSet.has(eid)); // only string-id matches removed; rest preserved
+    });
     const removed = current.length - remaining.length;
 
     await saveScene(id, remaining, row.app_state, row.files, expected);
-    const fresh = await fetchActiveBoardRow(id);
-    const board = await toFullBoardSafe(fresh);
+    const board = await toFullBoardSafe(await fetchAnyBoardRow(id));
     return apiOk({ scene_version: board.scene_version, removed, board });
   });
 }

@@ -79,7 +79,9 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
       if (error) console.warn("[jandraw] PUT metadata update failed (scene already saved):", error);
     }
 
-    const fresh = await fetchActiveBoardRow(id);
+    // fetchAnyBoardRow (not Active): the scene write already committed, so a concurrent
+    // soft-delete in this window must not turn a successful PUT into a misleading 404.
+    const fresh = await fetchAnyBoardRow(id);
     const board = await toFullBoardSafe(fresh);
     // top-level scene_version mirrors the returned board so they can never disagree.
     return apiOk({ board, scene_version: board.scene_version });

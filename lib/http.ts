@@ -42,11 +42,18 @@ export function apiOk(data: unknown, status = 200): NextResponse {
 
 // Parse a JSON request body, mapping malformed JSON to a 400.
 export async function readJson<T = unknown>(req: NextRequest): Promise<T> {
+  let parsed: unknown;
   try {
-    return (await req.json()) as T;
+    parsed = await req.json();
   } catch {
     throw new HttpError("bad_request", "Request body must be valid JSON.");
   }
+  // A bare null / number / string / array parses fine but isn't a request object;
+  // reject so handlers can safely read body.<field> without a TypeError → 500.
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new HttpError("bad_request", "Request body must be a JSON object.");
+  }
+  return parsed as T;
 }
 
 // Runs a route handler body in a try/catch so a thrown HttpError becomes the error
