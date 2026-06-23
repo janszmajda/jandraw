@@ -23,3 +23,6 @@ next-env.d.ts
 *.log
 .DS_Store
 Thumbs.db
+
+# local assistant config
+.claude/

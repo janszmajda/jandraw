@@ -26,7 +26,7 @@
 
 ### Secrets (NONE are stored in this repo)
 - Three env vars, all server-only: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `JANDRAW_EDIT_SECRET`. Set in Vercel (Production) and in local `.env.local` (gitignored; verified never committed, history is pickaxe-clean).
-- `JANDRAW_EDIT_SECRET` is a **strong 32-char random value** (kept in Jan's password manager). The same value is used locally and on Vercel, so there is one password everywhere. (The original weak `jszmajda23` is retired.)
+- `JANDRAW_EDIT_SECRET` is a **strong 32-char random value** (kept in Jan's password manager). The same value is used locally and on Vercel, so there is one password everywhere. (The original weak passphrase is retired and intentionally not recorded here.)
 
 ### Claude edits boards over MCP (this was the point)
 - `mcp/server.mjs` is a built MCP server exposing 12 board tools: `list_boards`, `get_board`, `create_board`, `add_elements`, `update_elements`, `delete_elements`, `replace_board`, `rename_board`, `set_board_public`, `delete_board`, `list_snapshots`, `restore_snapshot`. It is a thin authenticated wrapper over the HTTP API in section B.
