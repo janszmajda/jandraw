@@ -26,7 +26,9 @@ function loadEnvFallback() {
       for (const line of txt.split(/\r?\n/)) {
         const m = /^\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$/.exec(line);
         if (m && process.env[m[1]] === undefined) {
-          process.env[m[1]] = m[2].replace(/^["']|["']$/g, "");
+          const v = m[2];
+          // strip quotes only when they wrap the WHOLE value (not a stray leading/trailing one)
+          process.env[m[1]] = /^"[\s\S]*"$|^'[\s\S]*'$/.test(v) ? v.slice(1, -1) : v;
         }
       }
       if (process.env.JANDRAW_EDIT_SECRET) return;
@@ -39,6 +41,7 @@ loadEnvFallback();
 
 const API_URL = (process.env.JANDRAW_API_URL || "http://localhost:3000").replace(/\/+$/, "");
 const SECRET = process.env.JANDRAW_EDIT_SECRET;
+const enc = encodeURIComponent; // path-segment encode for caller-supplied ids
 if (!SECRET) {
   console.error(
     "[jandraw-mcp] JANDRAW_EDIT_SECRET is not set. Set it in the environment or repo .env.local.",
@@ -63,8 +66,8 @@ async function api(method, path, body) {
     data = text;
   }
   if (!res.ok) {
-    const msg =
-      data && data.error ? `${data.error.code}: ${data.error.message}` : `HTTP ${res.status}`;
+    const err = data && typeof data === "object" ? data.error : null;
+    const msg = err && err.code && err.message ? `${err.code}: ${err.message}` : `HTTP ${res.status}`;
     throw new Error(msg);
   }
   return data;
@@ -126,7 +129,7 @@ server.registerTool(
   },
   ({ id, include_images }) =>
     run(async () => {
-      const data = await api("GET", `/api/boards/${id}`);
+      const data = await api("GET", `/api/boards/${enc(id)}`);
       return ok(include_images ? data : { board: lean(data.board) });
     }),
 );
@@ -163,7 +166,7 @@ server.registerTool(
   },
   ({ id, elements, expected_scene_version }) =>
     run(async () => {
-      const data = await api("POST", `/api/boards/${id}/elements`, { elements, expected_scene_version });
+      const data = await api("POST", `/api/boards/${enc(id)}/elements`, { elements, expected_scene_version });
       return ok({ scene_version: data.scene_version, board: lean(data.board) });
     }),
 );
@@ -181,7 +184,7 @@ server.registerTool(
   },
   ({ id, updates, expected_scene_version }) =>
     run(async () => {
-      const data = await api("PATCH", `/api/boards/${id}/elements`, { updates, expected_scene_version });
+      const data = await api("PATCH", `/api/boards/${enc(id)}/elements`, { updates, expected_scene_version });
       return ok({ scene_version: data.scene_version, board: lean(data.board) });
     }),
 );
@@ -199,7 +202,7 @@ server.registerTool(
   },
   ({ id, ids, expected_scene_version }) =>
     run(async () => {
-      const data = await api("DELETE", `/api/boards/${id}/elements`, { ids, expected_scene_version });
+      const data = await api("DELETE", `/api/boards/${enc(id)}/elements`, { ids, expected_scene_version });
       return ok({ scene_version: data.scene_version, removed: data.removed, board: lean(data.board) });
     }),
 );
@@ -221,7 +224,7 @@ server.registerTool(
   },
   ({ id, elements, app_state, files, name, is_public, expected_scene_version }) =>
     run(async () => {
-      const data = await api("PUT", `/api/boards/${id}`, {
+      const data = await api("PUT", `/api/boards/${enc(id)}`, {
         elements,
         app_state: app_state ?? {},
         files: files ?? {},
@@ -241,7 +244,7 @@ server.registerTool(
     inputSchema: { id: z.string(), name: z.string() },
   },
   ({ id, name }) =>
-    run(async () => ok({ board: lean((await api("PATCH", `/api/boards/${id}`, { name })).board) })),
+    run(async () => ok({ board: lean((await api("PATCH", `/api/boards/${enc(id)}`, { name })).board) })),
 );
 
 server.registerTool(
@@ -252,7 +255,7 @@ server.registerTool(
     inputSchema: { id: z.string(), is_public: z.boolean() },
   },
   ({ id, is_public }) =>
-    run(async () => ok({ board: lean((await api("PATCH", `/api/boards/${id}`, { is_public })).board) })),
+    run(async () => ok({ board: lean((await api("PATCH", `/api/boards/${enc(id)}`, { is_public })).board) })),
 );
 
 server.registerTool(
@@ -263,7 +266,7 @@ server.registerTool(
     inputSchema: { id: z.string(), hard: z.boolean().optional() },
   },
   ({ id, hard }) =>
-    run(async () => ok(await api("DELETE", `/api/boards/${id}${hard ? "?hard=1" : ""}`))),
+    run(async () => ok(await api("DELETE", `/api/boards/${enc(id)}${hard ? "?hard=1" : ""}`))),
 );
 
 server.registerTool(
@@ -276,7 +279,7 @@ server.registerTool(
   ({ id, limit }) =>
     run(async () => {
       const qs = limit ? `?limit=${limit}` : "";
-      return ok(await api("GET", `/api/boards/${id}/snapshots${qs}`));
+      return ok(await api("GET", `/api/boards/${enc(id)}/snapshots${qs}`));
     }),
 );
 
@@ -289,7 +292,7 @@ server.registerTool(
   },
   ({ id, snapshot_id }) =>
     run(async () => {
-      const data = await api("POST", `/api/boards/${id}/restore/${snapshot_id}`);
+      const data = await api("POST", `/api/boards/${enc(id)}/restore/${enc(snapshot_id)}`);
       return ok({ scene_version: data.scene_version, board: lean(data.board) });
     }),
 );

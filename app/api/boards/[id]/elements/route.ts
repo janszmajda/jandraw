@@ -28,10 +28,20 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     }
 
     const row = await fetchActiveBoardRow(id);
+    const expected =
+      typeof body.expected_scene_version === "number" ? body.expected_scene_version : undefined;
     assertVersion(body.expected_scene_version, Number(row.scene_version));
 
-    const merged = [...currentElements(row), ...incoming];
-    const version = await saveScene(id, merged, row.app_state, row.files);
+    // Upsert by id so a re-POST of an existing id replaces it (kept on top) rather than
+    // creating a duplicate id; keeps adds idempotent and preserves the by-id invariant.
+    const incomingById = new Map(
+      incoming.map((e) => [String((e as Record<string, unknown>).id), e]),
+    );
+    const merged = [
+      ...currentElements(row).filter((e) => !incomingById.has(String(e.id))),
+      ...incoming,
+    ];
+    const version = await saveScene(id, merged, row.app_state, row.files, expected);
     const fresh = await fetchActiveBoardRow(id);
     return apiOk({ scene_version: version, board: await toFullBoard(fresh) });
   });
@@ -58,6 +68,8 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
     }
 
     const row = await fetchActiveBoardRow(id);
+    const expected =
+      typeof body.expected_scene_version === "number" ? body.expected_scene_version : undefined;
     assertVersion(body.expected_scene_version, Number(row.scene_version));
 
     const current = currentElements(row);
@@ -72,7 +84,7 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       const u = byId.get(String(e.id));
       return u ? { ...e, ...u } : e; // shallow top-level overwrite
     });
-    const version = await saveScene(id, merged, row.app_state, row.files);
+    const version = await saveScene(id, merged, row.app_state, row.files, expected);
     const fresh = await fetchActiveBoardRow(id);
     return apiOk({ scene_version: version, board: await toFullBoard(fresh) });
   });
@@ -97,6 +109,8 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
     }
 
     const row = await fetchActiveBoardRow(id);
+    const expected =
+      typeof body.expected_scene_version === "number" ? body.expected_scene_version : undefined;
     assertVersion(body.expected_scene_version, Number(row.scene_version));
 
     const idSet = new Set(ids as string[]);
@@ -104,7 +118,7 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
     const remaining = current.filter((e) => !idSet.has(String(e.id)));
     const removed = current.length - remaining.length;
 
-    const version = await saveScene(id, remaining, row.app_state, row.files);
+    const version = await saveScene(id, remaining, row.app_state, row.files, expected);
     const fresh = await fetchActiveBoardRow(id);
     return apiOk({ scene_version: version, removed, board: await toFullBoard(fresh) });
   });

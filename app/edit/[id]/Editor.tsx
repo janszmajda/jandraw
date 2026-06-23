@@ -64,6 +64,8 @@ export default function Editor({ boardId }: { boardId: string }) {
   const pendingRef = useRef(false);
   const readyRef = useRef(false);
   const baselineSetRef = useRef(false);
+  const inFlightRef = useRef<Promise<void> | null>(null);
+  const suspendRef = useRef(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ---- Load the board scene once ----
@@ -99,34 +101,44 @@ export default function Editor({ boardId }: { boardId: string }) {
   // ---- Autosave (serialized, latest-wins) ----
   const doSave = useCallback(async () => {
     const api = apiRef.current;
-    if (!api) return;
+    if (!api || suspendRef.current) return;
     if (savingRef.current) {
       pendingRef.current = true;
       return;
     }
     savingRef.current = true;
     setSaveStatus("saving");
-    try {
-      const elements = api.getSceneElements();
-      const appState = api.getAppState();
-      const files = api.getFiles();
-      const sig = computeSig(elements, appState, files);
-      const res = await fetch(`/api/boards/${boardId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ elements, app_state: appState, files }),
-      });
-      if (!res.ok) throw new Error("save failed");
-      lastSavedSigRef.current = sig;
-      setSaveStatus("saved");
-    } catch {
-      setSaveStatus("failed");
-    } finally {
-      savingRef.current = false;
-      if (pendingRef.current) {
-        pendingRef.current = false;
-        void doSave();
+    const work = (async () => {
+      try {
+        const elements = api.getSceneElements();
+        const appState = api.getAppState();
+        const files = api.getFiles();
+        const sig = computeSig(elements, appState, files);
+        const res = await fetch(`/api/boards/${boardId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ elements, app_state: appState, files }),
+        });
+        if (!res.ok) throw new Error("save failed");
+        // Don't record "saved" if a restore/import superseded this save mid-flight.
+        if (!suspendRef.current) lastSavedSigRef.current = sig;
+        setSaveStatus("saved");
+      } catch {
+        setSaveStatus("failed");
+      } finally {
+        savingRef.current = false;
+        if (pendingRef.current && !suspendRef.current) {
+          pendingRef.current = false;
+          void doSave();
+        }
       }
+    })();
+    // Expose the in-flight save so restore/import can await it before writing.
+    inFlightRef.current = work;
+    try {
+      await work;
+    } finally {
+      if (inFlightRef.current === work) inFlightRef.current = null;
     }
   }, [boardId]);
 
@@ -136,7 +148,7 @@ export default function Editor({ boardId }: { boardId: string }) {
       appState: Record<string, unknown>,
       files: Record<string, unknown>,
     ) => {
-      if (!readyRef.current) return;
+      if (!readyRef.current || suspendRef.current) return;
       const sig = computeSig(elements, appState, files);
       // Excalidraw fires onChange on mount with its normalized scene (grid/defaults
       // filled in) which differs from the stored scene. Adopt that first emission as
@@ -166,13 +178,22 @@ export default function Editor({ boardId }: { boardId: string }) {
       const sig = computeSig(elements, appState, files);
       if (sig === lastSavedSigRef.current) return;
       const body = JSON.stringify({ elements, app_state: appState, files });
-      fetch(`/api/boards/${boardId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body,
-        keepalive: true,
-      }).catch(() => {});
-      lastSavedSigRef.current = sig;
+      // keepalive request bodies are capped at ~64KB by the browser. Only use it under
+      // the cap, and only record "saved" once the request is actually accepted — never
+      // optimistically (a swallowed failure must not mark the scene saved). Larger
+      // scenes rely on the visibilitychange→hidden save below.
+      if (body.length < 60000) {
+        fetch(`/api/boards/${boardId}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body,
+          keepalive: true,
+        })
+          .then((res) => {
+            if (res.ok) lastSavedSigRef.current = sig;
+          })
+          .catch(() => {});
+      }
     };
     const onVisibility = () => {
       if (document.visibilityState === "hidden") void doSave();
@@ -248,12 +269,24 @@ export default function Editor({ boardId }: { boardId: string }) {
       const scene = await loadFromBlob(file, null, null);
       const api = apiRef.current;
       if (!api) return;
-      if (debounceRef.current) clearTimeout(debounceRef.current); // drop any stale queued save
+      // Suspend autosave while swapping the scene; let any in-flight save land first so
+      // it can't clobber the replacement, and drop any queued save.
+      suspendRef.current = true;
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+      pendingRef.current = false;
+      if (inFlightRef.current) {
+        try {
+          await inFlightRef.current;
+        } catch {
+          /* ignore */
+        }
+      }
       api.updateScene({ elements: scene.elements, appState: scene.appState });
       if (scene.files) api.addFiles(Object.values(scene.files));
-      // The programmatic updateScene fires onChange → the normal debounced autosave
-      // persists the replacement via PUT.
+      suspendRef.current = false;
+      void doSave(); // persist the imported replacement via PUT
     } catch {
+      suspendRef.current = false;
       setSaveStatus("failed");
     }
   }
@@ -272,10 +305,19 @@ export default function Editor({ boardId }: { boardId: string }) {
   }
 
   async function restoreSnapshot(snapId: string) {
-    // Cancel any pending autosave so a queued PUT can't clobber the restored scene.
+    // Suspend autosave and let any in-flight save land FIRST, so neither a queued nor
+    // an in-flight PUT can overwrite the restored scene (restore must commit last).
+    suspendRef.current = true;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     pendingRef.current = false;
     try {
+      if (inFlightRef.current) {
+        try {
+          await inFlightRef.current;
+        } catch {
+          /* ignore */
+        }
+      }
       const res = await fetch(`/api/boards/${boardId}/restore/${snapId}`, { method: "POST" });
       if (!res.ok) throw new Error();
       const { board } = await res.json();
@@ -295,6 +337,8 @@ export default function Editor({ boardId }: { boardId: string }) {
       setShowHistory(false);
     } catch {
       setSaveStatus("failed");
+    } finally {
+      suspendRef.current = false;
     }
   }
 

@@ -17,7 +17,12 @@ export async function POST(req: NextRequest) {
     let fallbackName: string | undefined;
 
     if (contentType.includes("multipart/form-data")) {
-      const form = await req.formData();
+      let form: FormData;
+      try {
+        form = await req.formData();
+      } catch {
+        throw new HttpError("bad_request", "Invalid multipart form data.");
+      }
       const file = form.get("file");
       if (!(file instanceof File)) {
         throw new HttpError("bad_request", "multipart body must include a 'file' field.");

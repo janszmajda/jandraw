@@ -53,10 +53,21 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
     if (body.is_public !== undefined) expectBoolean(body.is_public, "is_public");
 
     const row = await fetchActiveBoardRow(id);
+    const expected =
+      typeof body.expected_scene_version === "number" ? body.expected_scene_version : undefined;
     assertVersion(body.expected_scene_version, Number(row.scene_version));
 
-    // name / is_public, if supplied, are updated in the same request (metadata-only,
-    // does not affect the snapshot which captures the prior scene fields).
+    // Scene write first (snapshots + version bump, atomic in save_board_scene[_checked]).
+    const version = await saveScene(
+      id,
+      elements,
+      appState,
+      files as Record<string, Record<string, unknown>>,
+      expected,
+    );
+
+    // name / is_public applied only AFTER the scene write succeeds, so a failed scene
+    // write can't leave a committed rename/public-toggle when the client is told it failed.
     const meta: Record<string, unknown> = {};
     if (cleanName !== undefined) meta.name = cleanName;
     if (body.is_public !== undefined) meta.is_public = body.is_public;
@@ -65,12 +76,6 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
       if (error) throw error;
     }
 
-    const version = await saveScene(
-      id,
-      elements,
-      appState,
-      files as Record<string, Record<string, unknown>>,
-    );
     const fresh = await fetchActiveBoardRow(id);
     return apiOk({ board: await toFullBoard(fresh), scene_version: version });
   });

@@ -15,10 +15,13 @@ const PAYLOAD_PREFIX = "jandraw.v1.";
 
 function getSecret(): string {
   const s = process.env.JANDRAW_EDIT_SECRET;
-  if (!s) {
+  if (!s || !s.trim()) {
     throw new Error("Jandraw: JANDRAW_EDIT_SECRET must be set (see .env.local).");
   }
-  return s;
+  // Trim once here so all three consumers (login compare, bearer compare which also
+  // trims the candidate, and HMAC signing) agree even if the env value picked up a
+  // stray trailing newline/space.
+  return s.trim();
 }
 
 // Timing-safe string comparison with a length guard (lengths differing is itself
@@ -96,8 +99,15 @@ export function requireAuth(req: NextRequest): void {
 // For server components (page-level gating): the browser only carries the cookie
 // on navigations, so a cookie check is the right gate for pages.
 export async function isAuthedFromCookies(): Promise<boolean> {
-  const store = await cookies();
-  return verifySessionValue(store.get(SESSION_COOKIE)?.value);
+  // Fail closed: if the secret is unset/misconfigured (getSecret throws inside
+  // verifySessionValue), treat the request as unauthenticated so the page redirects
+  // to /login instead of 500-ing — and /login itself stays reachable.
+  try {
+    const store = await cookies();
+    return verifySessionValue(store.get(SESSION_COOKIE)?.value);
+  } catch {
+    return false;
+  }
 }
 
 export async function setSessionCookie(now: number = Date.now()): Promise<void> {

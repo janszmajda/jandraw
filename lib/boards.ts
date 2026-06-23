@@ -109,19 +109,47 @@ export async function saveScene(
   elements: unknown[],
   appState: unknown,
   files: Record<string, Record<string, unknown>>,
+  expectedVersion?: number,
 ): Promise<number> {
   const storedFiles = await extractAndStoreImages(id, files ?? {});
   const cleanAppState = sanitizeAppState(appState as Record<string, unknown>);
+  const els = Array.isArray(elements) ? elements : [];
+
+  // When the caller supplies expected_scene_version, do the compare-and-bump
+  // atomically in save_board_scene_checked (closes the read-then-write race that a
+  // pre-flight check alone can't). Falls back to the plain save if that function
+  // isn't installed yet (migration in mcp/../ docs); the route's pre-flight
+  // assertVersion still rejects the common stale case.
+  if (typeof expectedVersion === "number") {
+    const { data, error } = await supabase.rpc("save_board_scene_checked", {
+      p_id: id,
+      p_elements: els,
+      p_app_state: cleanAppState,
+      p_files: storedFiles,
+      p_expected_version: expectedVersion,
+    });
+    if (error) {
+      if (typeof error.message === "string" && error.message.includes("jandraw_version_conflict")) {
+        throw new HttpError(
+          "conflict",
+          "Scene version mismatch — the board changed since you loaded it.",
+        );
+      }
+      if ((error as { code?: string }).code !== "42883") throw error; // 42883 = function not installed → fall back
+    } else {
+      if (data === null || data === undefined) throw new HttpError("not_found", "Board not found.");
+      return Number(data);
+    }
+  }
+
   const { data, error } = await supabase.rpc("save_board_scene", {
     p_id: id,
-    p_elements: Array.isArray(elements) ? elements : [],
+    p_elements: els,
     p_app_state: cleanAppState,
     p_files: storedFiles,
   });
   if (error) throw error;
-  if (data === null || data === undefined) {
-    throw new HttpError("not_found", "Board not found.");
-  }
+  if (data === null || data === undefined) throw new HttpError("not_found", "Board not found.");
   return Number(data);
 }
 

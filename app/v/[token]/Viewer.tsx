@@ -32,9 +32,13 @@ export default function Viewer({ token }: { token: string }) {
   const [board, setBoard] = useState<ViewBoard | null>(null);
   const { theme } = useTheme();
 
-  const load = () => {
+  const [nonce, setNonce] = useState(0);
+  const reload = () => setNonce((n) => n + 1);
+
+  useEffect(() => {
+    const ctrl = new AbortController();
     setState("loading");
-    fetch(`/api/view/${token}`)
+    fetch(`/api/view/${token}`, { signal: ctrl.signal })
       .then(async (res) => {
         if (res.status === 404) {
           setState("missing");
@@ -48,10 +52,11 @@ export default function Viewer({ token }: { token: string }) {
         setBoard(data.board);
         setState("ready");
       })
-      .catch(() => setState("error"));
-  };
-
-  useEffect(load, [token]);
+      .catch((e) => {
+        if (e?.name !== "AbortError") setState("error");
+      });
+    return () => ctrl.abort();
+  }, [token, nonce]);
 
   if (state === "loading") return <Centered>Loading…</Centered>;
   if (state === "missing")
@@ -62,7 +67,7 @@ export default function Viewer({ token }: { token: string }) {
         <div>
           <p className="mb-3">Could not load this board.</p>
           <button
-            onClick={load}
+            onClick={reload}
             className="rounded-md border border-black/15 px-3 py-1 text-sm dark:border-white/20"
           >
             Retry

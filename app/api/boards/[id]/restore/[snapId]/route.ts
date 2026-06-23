@@ -27,7 +27,14 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       .select("board_id,elements,app_state,files")
       .eq("id", snapId)
       .maybeSingle();
-    if (error) throw error;
+    if (error) {
+      // A non-UUID snapId makes Postgres raise 22P02 (invalid uuid syntax); per spec
+      // that's a 404, not a 500.
+      if ((error as { code?: string }).code === "22P02") {
+        throw new HttpError("not_found", "Snapshot not found for this board.");
+      }
+      throw error;
+    }
     const snap = data as SnapshotScene | null;
     if (!snap || snap.board_id !== id) {
       throw new HttpError("not_found", "Snapshot not found for this board.");

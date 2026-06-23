@@ -23,7 +23,12 @@ export async function GET(req: NextRequest) {
       .select(SUMMARY_COLUMNS)
       .eq("is_deleted", trash === "1")
       .order("updated_at", { ascending: false });
-    if (q) query = query.ilike("name", `%${q}%`);
+    if (q) {
+      // Escape LIKE metacharacters so a typed % or _ matches literally (default
+      // ESCAPE is backslash; PostgREST adds no custom ESCAPE clause).
+      const esc = q.replace(/[\\%_]/g, (c) => `\\${c}`);
+      query = query.ilike("name", `%${esc}%`);
+    }
 
     const { data, error } = await query;
     if (error) throw error;
