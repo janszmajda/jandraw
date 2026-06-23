@@ -1,6 +1,61 @@
 # Jandraw build plan
 
+---
+
+## Current state (as-built — 2026-06-23)
+
+> This section is the up-to-date snapshot of the **shipped** app. The sections that
+> follow it are the original build plan + spec; they remain accurate as reference for
+> the schema (A), API (B), and page layouts (C), with the deltas called out below.
+
+**Status: built, hardened, and deployed. Live and in use.**
+
+- **Live URL:** https://jandraw.vercel.app (Vercel, production). Log in with the edit passphrase.
+- **Source:** private GitHub repo `janszmajda/jandraw`, default branch `master`. Vercel auto-deploys on every push to `master`.
+- **Local dev:** `npm run dev` (or `npm run build && npm start`) at http://localhost:3000.
+
+### Stack (actual versions)
+- Next.js 16.2.9 (App Router) + React 19.2.4 + TypeScript + Tailwind v4. Note: Next 16 makes `cookies()`, route `params`, and `headers()` async, and dropped the `eslint` key from `next.config`.
+- `@excalidraw/excalidraw` 0.18.1 (loaded via `next/dynamic`, `ssr:false`).
+- `@supabase/supabase-js` 2.108.2 (service-role client, server-only).
+- `@modelcontextprotocol/sdk` 1.29.0 (MCP server).
+
+### Infrastructure
+- **Supabase** project ref `yuohxhfzgiowxwhcdqnk`: schema from section A, private `board-images` bucket. The `service_role` role needed an explicit `grant usage, all on schema public to service_role` (Supabase did not auto-grant).
+- **Atomic save guard installed.** `db/2026-06-22-atomic-version-check.sql` adds `save_board_scene_checked` (the `save_board_scene` variant with a `for update` row lock + version check). It was run in Supabase and verified active. `saveScene` uses it when `expected_scene_version` is supplied, and falls back to the plain `save_board_scene` if it is ever absent.
+
+### Secrets (NONE are stored in this repo)
+- Three env vars, all server-only: `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `JANDRAW_EDIT_SECRET`. Set in Vercel (Production) and in local `.env.local` (gitignored; verified never committed, history is pickaxe-clean).
+- `JANDRAW_EDIT_SECRET` is a **strong 32-char random value** (kept in Jan's password manager). The same value is used locally and on Vercel, so there is one password everywhere. (The original weak `jszmajda23` is retired.)
+
+### Claude edits boards over MCP (this was the point)
+- `mcp/server.mjs` is a built MCP server exposing 12 board tools: `list_boards`, `get_board`, `create_board`, `add_elements`, `update_elements`, `delete_elements`, `replace_board`, `rename_board`, `set_board_public`, `delete_board`, `list_snapshots`, `restore_snapshot`. It is a thin authenticated wrapper over the HTTP API in section B.
+- `.mcp.json` registers it and points `JANDRAW_API_URL` at the **live site** (`https://jandraw.vercel.app`); the bearer secret is read from `.env.local`. So Claude can edit the live boards without Jan's laptop running.
+- `README.md` documents how to use the feature and set the MCP up in another environment (Claude Code and Claude Desktop).
+
+### Deltas from the original plan
+- **Theme (changed):** the plan said "follow the device `prefers-color-scheme`, no toggle." Shipped behavior is **default light, with a dark-mode toggle on the dashboard that applies app-wide** (`app/_lib/useTheme.ts`, class-based `.dark` on `<html>` + `localStorage`; a no-flash inline script in the layout). This overrides the section 2 theme decision, section 9's theme bullet, and the section C intro.
+- **MCP (done early):** section 11 called the MCP wrapper optional/"later." It is built and is now the primary way Claude edits boards.
+- **Deploy (done):** runbook step 10 is complete; the app is live on Vercel.
+
+### Hardening + testing
+- A multi-agent code-review/critic **bug-hunt loop** was run to convergence (confirmed-finding counts 24 → 21 → 16 → 15 → 11 → 7 → 6; final round 0 critical / 0 high).
+- `scripts/regression.sh` — a 65-check HTTP regression suite (auth, validation, search escaping, board CRUD, the granular elements API, the version guard, snapshots/restore, export, public view, token rotation, import, trash lifecycle). Reads the secret from the env / `.env.local`. Passes against both local and production. Run with `bash scripts/regression.sh` or `JANDRAW_API_URL=https://jandraw.vercel.app JANDRAW_EDIT_SECRET=… bash scripts/regression.sh`.
+- `scripts/mcp-smoke.mjs` — spawns the MCP server, does the protocol handshake, and calls `list_boards` end-to-end.
+
+### Notable bugs found and fixed
+- **Save-on-open churn:** opening a board double-saved (Excalidraw's mount `onChange` differs from the stored `app_state`), flooding snapshots. Fixed by adopting the first post-mount `onChange` as the save baseline.
+- **Blank-on-exit data loss (critical):** opening a board, editing, then leaving via "‹ Back" could overwrite it with an empty canvas. Root cause: the autosave read the scene from the Excalidraw API, and a debounced save pending when the component unmounted (client-side nav fires no `beforeunload`) ran ~1.5s later against a torn-down Excalidraw, which returns an empty element array — that empty scene was PUT. Fix: saves capture the live scene on every `onChange` into a ref and never read the (possibly dead) API; `doSave` is guarded against running post-unmount; the pending debounce is cleared on unmount; and a final save persists the captured scene via a normal fetch that survives in-app navigation. Verified with a real-browser repro on both local and prod (open → draw → Back immediately → reopen → content + edit survive). The two seeded boards' lost content was recovered from snapshots.
+
+### Open / optional
+- Custom domain (still on the free `.vercel.app` URL).
+- Snapshot retention numbers (currently 30 days + most recent 50).
+
+---
+
 ## 0. Before you start (setup checklist)
+
+> Historical: this checklist was the pre-build setup. It is all done (see "Current state" above). Kept for reference / re-provisioning.
 
 Read this first. It lists what is already in place and what you must set up before the build can run end to end.
 
@@ -73,7 +128,7 @@ Jan actually uses.
   public board cannot be found by guessing names.
 - Dashboard: a flat list sorted by most recently edited, with a search box.
 - Session: stay logged in about 30 days before the passphrase is needed again.
-- Theme: the editor and view pages follow the device light or dark setting.
+- Theme: ~~the editor and view pages follow the device light or dark setting.~~ **Superseded (see "Current state"): default light, with a dark-mode toggle on the dashboard that applies app-wide.**
 
 ## 3. Defaulted decisions (confirm or change)
 These were not asked about. Sensible defaults are chosen so the build is unblocked.
@@ -199,7 +254,7 @@ Images:
   `onChange` (debounced) and persist them. Use the `excalidrawAPI` ref for imperative calls
   (updateScene, addFiles, getSceneElements, getAppState, getFiles).
 - Read-only view uses `viewModeEnabled`.
-- Set the Excalidraw `theme` to match the device using the prefers-color-scheme setting.
+- Set the Excalidraw `theme` from the app theme. As-built this is default-light with a dashboard dark toggle applied app-wide (`useTheme.ts`), not the device `prefers-color-scheme`.
 - File import uses `loadFromBlob` to parse an uploaded `.excalidraw`. File export uses
   `serializeAsJSON` then a download. Same format means real excalidraw.com opens the file and
   vice versa.
@@ -218,10 +273,12 @@ Share links are built from the browser origin at click time (section C), so ther
   element endpoints for surgical edits, PUT for big rewrites, export to grab a file.
 - This mirrors how Claude uses the Excalidraw+ MCP today, but against Jan's own server with
   no encryption in the way, so editing is straightforward.
-- A thin MCP wrapper over these endpoints can be added later if first-class tools are wanted
-  instead of raw HTTP. Not required for the build.
+- A thin MCP wrapper over these endpoints ~~can be added later~~ **is built** (`mcp/server.mjs`, 12 tools; `.mcp.json` points it at the live site). This is now the primary way Claude edits boards — see "Current state" and `README.md`.
 
 ## 12. Build order (implementation runbook)
+
+> All 10 steps are complete and the app is live (see "Current state"). Kept as the historical build order.
+
 1. Scaffold the Next.js app. This folder is not empty (it already has `PLAN.md`, `.git`, and `.gitignore`), and create-next-app refuses a non-empty directory, so scaffold into a temp folder and move the files in. From `C:\Users\jan\Documents\jandraw`:
    - Run: `npx create-next-app@latest jandraw-tmp --ts --app --tailwind --eslint --no-src-dir --import-alias "@/*" --use-npm --yes`
    - Move the generated contents up into this folder, keeping the existing `PLAN.md`, `.git`, and the committed `.gitignore` (it already covers `.next`, `.env*`, and `.vercel`). Do not overwrite our files. Then delete `jandraw-tmp`.
@@ -264,7 +321,7 @@ Share links are built from the browser origin at click time (section C), so ther
 Two existing boards are backed up at `C:\Users\jan\Documents\excalidraw-backup`:
 - `Synth-Data-Pipeline_2026-06-21.excalidraw` (the main one, 327 elements)
 - `Synth-Task-Generation_2026-06-21.excalidraw` (19 elements)
-These become the first rows once the app runs (build step 8).
+These were imported as the first boards (build step 8) and are live as `synth-data-pipeline` and `synth-task-generation`.
 
 ## 16. Still open (Jan's call)
 - Confirm or change the defaulted decisions in section 3.
@@ -640,6 +697,7 @@ Notes:
 - Step 1 runs only for the scene-changing routes listed above, where `elements`, `app_state`, or `files` actually change.
 - Restore (`POST /api/boards/[id]/restore/[snapId]`) is itself a scene write: the route reads the chosen snapshot row, then calls `save_board_scene` with that snapshot's `elements`, `app_state`, and `files`, so the current state is snapshotted first (step 1) and restoring is itself undoable.
 - `scene_version` is bigint in the column. supabase-js returns it as a JS number in JSON; realistic counts stay well under 2^53, so the route coerces with `Number(...)` and returns a plain number. Do not hand-roll BigInt serialization (`JSON.stringify` of a BigInt throws).
+- As-built addition: `db/2026-06-22-atomic-version-check.sql` defines `save_board_scene_checked` — the same routine plus a `select ... for update` row lock and a version check that raises `jandraw_version_conflict` (mapped to `409`) when the locked `scene_version` differs from `p_expected_version`. The route calls it when `expected_scene_version` is supplied so the check-and-bump is atomic (closing the read-then-write race a pre-flight check alone leaves open), and falls back to plain `save_board_scene` if it is absent. This migration is installed in the live database.
 
 ### A.9 Storage cleanup on hard delete
 
@@ -1315,7 +1373,7 @@ Rotate a board's `share_token`, invalidating the old `/v/[token]` link.
 
 ## C. Page layouts (text wireframes)
 
-All pages follow the device `prefers-color-scheme`. There is no theme toggle. The wireframes below show the light-mode chrome, but the same layout renders in dark mode with inverted colors. Desktop layout only.
+Theme (as-built): the app defaults to **light** and has a **dark-mode toggle on the dashboard** that applies app-wide (persisted in `localStorage`, no device-preference follow). The wireframes below show the light-mode chrome; the same layout renders in dark mode with inverted colors. Desktop layout only. (The original plan called for following the device `prefers-color-scheme` with no toggle; that was superseded — see "Current state".)
 
 View links (the `/v/<share_token>` URLs copied by the dashboard and the editor) are always built from `window.location.origin` at click time, so they work on production and on Vercel preview deploys without a hardcoded host or env base URL.
 
@@ -1427,7 +1485,7 @@ Behavior:
 - Top bar (left to right): a Back link to `/`, an editable board name field, a Public toggle, a Copy link button, then Import, Export, and History. A save status indicator sits at the right ("Saved", "Saving...", or "Save failed").
 - The canvas is the `@excalidraw/excalidraw` component filling the rest of the page. Its own toolbar (text, shapes, draw, arrow, etc.) is on the left, owned by the component.
 - The board loads from `GET /api/boards/[id]` (elements, app_state, files). The server has already run `rehydrateImages`, so `files` arrives as the full map with `dataURL`s and is passed to the component as `initialData.files`.
-- Autosave: edits are debounced about 1 to 2 seconds after the last Excalidraw `onChange`, then the full scene is written with `PUT /api/boards/[id]`. To avoid flooding `board_snapshots`, a save is skipped when `elements` and `files` are unchanged since the last save (app_state-only churn like cursor, selection, scroll, or zoom does NOT trigger a PUT; only the persisted app_state allowlist from A.10 is considered savable). Saves are serialized: if a new debounced save fires while a PUT is in flight, it is queued and only the latest scene is sent, so an older payload never overwrites a newer one. Latest save wins, and the server snapshots the prior state into board_snapshots before applying. The indicator reads "Saving..." during the call and "Saved" after.
+- Autosave: edits are debounced about 1 to 2 seconds after the last Excalidraw `onChange`, then the full scene is written with `PUT /api/boards/[id]`. To avoid flooding `board_snapshots`, a save is skipped when `elements` and `files` are unchanged since the last save (app_state-only churn like cursor, selection, scroll, or zoom does NOT trigger a PUT; only the persisted app_state allowlist from A.10 is considered savable). Saves are serialized: if a new debounced save fires while a PUT is in flight, it is queued and only the latest scene is sent, so an older payload never overwrites a newer one. Latest save wins, and the server snapshots the prior state into board_snapshots before applying. The indicator reads "Saving..." during the call and "Saved" after. As-built, saves read the scene captured from the latest `onChange` (never from the Excalidraw API, which returns an empty scene once unmounted), the pending debounce is cleared on unmount, and leaving the editor (e.g. "‹ Back") flushes a final save of the captured scene — this is the fix for the blank-on-exit data-loss bug (see "Current state").
 - Board name: editing the field and blurring (or pressing Enter) saves via `PATCH /api/boards/[id]` (name only).
 - Public toggle: flipping it calls `PATCH /api/boards/[id]` with `{ "is_public": ... }`. Copy link builds `${window.location.origin}/v/<share_token>` and copies it. A separate rotate action (in a small menu by Copy link) calls `POST /api/boards/[id]/rotate-token`; the route returns the new `share_token`, which is stored in local state so the next Copy link uses the fresh token, and the old link stops working.
 - Export downloads a `.excalidraw` file from `GET /api/boards/[id]/export`, identical to real Excalidraw format (the server rehydrates images so the file embeds full image bytes).
