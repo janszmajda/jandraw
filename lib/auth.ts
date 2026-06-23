@@ -60,7 +60,9 @@ export function verifySessionValue(
   const issuedAt = Number(value.slice(0, dot));
   if (!Number.isFinite(issuedAt) || issuedAt <= 0) return false;
   if (now - issuedAt > MAX_AGE_MS) return false; // expired (>30 days old)
-  if (issuedAt - now > 60_000) return false; // issued in the future (clock-skew guard)
+  // (No future-skew rejection: an HMAC over a future issuedAt is harmless, and rejecting it
+  // would invalidate valid cookies after a backward server-clock correction. Expiry above
+  // already bounds the lifetime.)
 
   let provided: Buffer;
   try {

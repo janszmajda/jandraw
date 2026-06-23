@@ -58,9 +58,9 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       }
     }
     const merged = [...current, ...incomingById.values()]; // preserves every existing entry
-    await saveScene(id, merged, row.app_state, row.files, expected);
+    const newVersion = await saveScene(id, merged, row.app_state, row.files, expected);
     const board = await toFullBoardSafe(await fetchAnyBoardRow(id));
-    return apiOk({ scene_version: board.scene_version, board });
+    return apiOk({ scene_version: newVersion, board }); // version this op authored, not a racy re-read
   });
 }
 
@@ -102,9 +102,9 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       const u = eid !== null ? byId.get(eid) : undefined;
       return u ? { ...(e as Record<string, unknown>), ...u } : e; // shallow overwrite; others untouched
     });
-    await saveScene(id, merged, row.app_state, row.files, expected);
+    const newVersion = await saveScene(id, merged, row.app_state, row.files, expected);
     const board = await toFullBoardSafe(await fetchAnyBoardRow(id));
-    return apiOk({ scene_version: board.scene_version, board });
+    return apiOk({ scene_version: newVersion, board }); // version this op authored, not a racy re-read
   });
 }
 
@@ -139,8 +139,8 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
     });
     const removed = current.length - remaining.length;
 
-    await saveScene(id, remaining, row.app_state, row.files, expected);
+    const newVersion = await saveScene(id, remaining, row.app_state, row.files, expected);
     const board = await toFullBoardSafe(await fetchAnyBoardRow(id));
-    return apiOk({ scene_version: board.scene_version, removed, board });
+    return apiOk({ scene_version: newVersion, removed, board });
   });
 }

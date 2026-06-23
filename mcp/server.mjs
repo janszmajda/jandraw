@@ -35,7 +35,10 @@ function loadEnvFallback() {
       if (m && process.env[m[1]] === undefined) {
         const raw = m[2];
         const isWrapped = (s) =>
-          s.length >= 2 && (s[0] === '"' || s[0] === "'") && s.at(-1) === s[0] && !s.slice(1, -1).includes(s[0]);
+          s.length >= 2 &&
+          (s[0] === '"' || s[0] === "'" || s[0] === "`") && // backtick too (dotenv/@next/env unwrap it)
+          s.at(-1) === s[0] &&
+          !s.slice(1, -1).includes(s[0]);
         // Quoted values keep content verbatim (inner '#' preserved). For unquoted values
         // strip an inline " # comment" first, THEN re-check wrapping so `"val" # comment`
         // unquotes correctly. A '#' with no preceding whitespace (e.g. inside a secret) stays.
@@ -91,6 +94,11 @@ async function api(method, path, body) {
     else if (typeof data === "string" && data.trim()) detail = data.slice(0, 500);
     else if (data && typeof data === "object") detail = JSON.stringify(data).slice(0, 500);
     throw new Error(detail ? `HTTP ${res.status}: ${detail}` : `HTTP ${res.status}`);
+  }
+  // A 2xx with an empty/non-JSON body (proxy/CDN page, empty 200) would otherwise make a
+  // handler read .scene_version off null/string → confusing TypeError. Fail clearly instead.
+  if (data === null || typeof data !== "object") {
+    throw new Error(`HTTP ${res.status} from ${method} ${path}: response body was not a JSON object`);
   }
   return data;
 }

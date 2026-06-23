@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { handle, apiOk, HttpError } from "@/lib/http";
 import { requireAuth } from "@/lib/auth";
 import { supabase } from "@/lib/supabase";
-import { fetchActiveBoardRow, toFullBoardSafe, saveScene } from "@/lib/boards";
+import { fetchActiveBoardRow, fetchAnyBoardRow, toFullBoardSafe, saveScene } from "@/lib/boards";
 
 type Ctx = { params: Promise<{ id: string; snapId: string }> };
 
@@ -40,14 +40,13 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       throw new HttpError("not_found", "Snapshot not found for this board.");
     }
 
-    await saveScene(
+    const newVersion = await saveScene(
       id,
       Array.isArray(snap.elements) ? snap.elements : [],
       snap.app_state,
       snap.files ?? {},
     );
-    const fresh = await fetchActiveBoardRow(id);
-    const board = await toFullBoardSafe(fresh);
-    return apiOk({ scene_version: board.scene_version, board });
+    const board = await toFullBoardSafe(await fetchAnyBoardRow(id));
+    return apiOk({ scene_version: newVersion, board });
   });
 }

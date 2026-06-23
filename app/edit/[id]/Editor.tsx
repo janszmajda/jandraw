@@ -218,23 +218,23 @@ export default function Editor({ boardId }: { boardId: string }) {
           })
           .catch(() => {});
       }
+      // Tab BLUR (page survives): use the normal serialized autosave — it completes, it
+      // surfaces failure as "Save failed", and it never races an untracked concurrent PUT.
+      if (!isClosing) {
+        void doSave();
+        return;
+      }
+
+      // Real CLOSE: the in-flight non-keepalive PUT is cancelled by the unload, so send the
+      // latest scene now via keepalive (byte-capped at ~64KB; over it is the one unavoidable
+      // close-time gap). Guard the baseline so a late keepalive can't clobber a newer
+      // import/restore baseline if the page happens to survive.
       const elements = api.getSceneElements();
       const appState = api.getAppState();
       const files = api.getFiles();
       const sig = computeSig(elements, appState, files);
       if (sig === lastSavedSigRef.current) return;
-
-      // On a tab BLUR (page survives) with a save already in flight, defer to doSave's
-      // serialization so we don't race a second concurrent PUT. On a real CLOSE there is
-      // no "later" — the in-flight non-keepalive PUT is cancelled by the unload — so send
-      // the latest scene now via keepalive instead of deferring to a doomed re-run.
-      if (!isClosing && (savingRef.current || inFlightRef.current)) {
-        pendingRef.current = true;
-        return;
-      }
-
       const body = JSON.stringify({ elements, app_state: appState, files });
-      // keepalive bodies are capped at ~64KB measured in BYTES; size with TextEncoder.
       if (new TextEncoder().encode(body).length < 60000) {
         const baseline = lastSavedSigRef.current;
         fetch(`/api/boards/${boardId}`, {
@@ -244,22 +244,12 @@ export default function Editor({ boardId }: { boardId: string }) {
           keepalive: true,
         })
           .then((res) => {
-            if (res.ok) {
-              // advance the baseline only if nothing superseded it (a later save, an
-              // import, or a restore) — never clobber a newer baseline with a stale sig.
-              if (lastSavedSigRef.current === baseline && !suspendRef.current) {
-                lastSavedSigRef.current = sig;
-              }
-            } else {
-              setSaveStatus("failed"); // surface failure so the Retry affordance appears
+            if (res.ok && lastSavedSigRef.current === baseline && !suspendRef.current) {
+              lastSavedSigRef.current = sig;
             }
           })
-          .catch(() => setSaveStatus("failed"));
-      } else if (!isClosing) {
-        // Over the keepalive cap but the page survives (blur): a normal save completes.
-        void doSave();
+          .catch(() => {});
       }
-      // else: closing + over-cap → unavoidable gap (browser keepalive limit; documented).
     };
     const onBeforeUnload = () => flush(true);
     const onVisibility = () => {
@@ -377,9 +367,10 @@ export default function Editor({ boardId }: { boardId: string }) {
   }
 
   async function restoreSnapshot(snapId: string) {
-    // Suspend autosave and let any in-flight save land FIRST, so neither a queued nor
-    // an in-flight PUT can overwrite the restored scene (restore must commit last).
-    suspendRef.current = true;
+    // Suspend autosave AND lock the canvas (view mode), and let any in-flight save land
+    // FIRST, so neither a queued/in-flight PUT nor an edit during the await can overwrite
+    // the restored scene (restore must commit last).
+    setSuspend(true);
     if (debounceRef.current) clearTimeout(debounceRef.current);
     pendingRef.current = false;
     try {

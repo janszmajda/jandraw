@@ -59,7 +59,7 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
     assertVersion(body.expected_scene_version, Number(row.scene_version));
 
     // Scene write first (snapshots + version bump, atomic in save_board_scene[_checked]).
-    await saveScene(
+    const newVersion = await saveScene(
       id,
       elements,
       appState,
@@ -83,8 +83,9 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
     // soft-delete in this window must not turn a successful PUT into a misleading 404.
     const fresh = await fetchAnyBoardRow(id);
     const board = await toFullBoardSafe(fresh);
-    // top-level scene_version mirrors the returned board so they can never disagree.
-    return apiOk({ board, scene_version: board.scene_version });
+    // Return the version THIS write authored (not a racy re-read that could reflect a
+    // concurrent write's higher version and cause the client a spurious 409 next time).
+    return apiOk({ board, scene_version: newVersion });
   });
 }
 
