@@ -168,7 +168,7 @@ export default function Editor({ boardId }: { boardId: string }) {
 
   // ---- Save on tab blur / close ----
   useEffect(() => {
-    const flushBeacon = () => {
+    const flush = () => {
       if (!readyRef.current) return;
       const api = apiRef.current;
       if (!api) return;
@@ -178,11 +178,13 @@ export default function Editor({ boardId }: { boardId: string }) {
       const sig = computeSig(elements, appState, files);
       if (sig === lastSavedSigRef.current) return;
       const body = JSON.stringify({ elements, app_state: appState, files });
-      // keepalive request bodies are capped at ~64KB by the browser. Only use it under
-      // the cap, and only record "saved" once the request is actually accepted — never
-      // optimistically (a swallowed failure must not mark the scene saved). Larger
-      // scenes rely on the visibilitychange→hidden save below.
-      if (body.length < 60000) {
+      // keepalive bodies are capped at ~64KB measured in BYTES (not UTF-16 units), so
+      // size it with TextEncoder. Under the cap, use keepalive so the save survives a
+      // tab close, recording "saved" only on a confirmed res.ok. Over the cap there is no
+      // reliable close-time transport, so fall back to a normal save — it completes on a
+      // tab blur (page survives); an edit made <1.5s before fully closing a >64KB board
+      // is the one unavoidable gap (would need decoupling image bytes from the PUT).
+      if (new TextEncoder().encode(body).length < 60000) {
         fetch(`/api/boards/${boardId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -193,15 +195,17 @@ export default function Editor({ boardId }: { boardId: string }) {
             if (res.ok) lastSavedSigRef.current = sig;
           })
           .catch(() => {});
+      } else {
+        void doSave();
       }
     };
     const onVisibility = () => {
-      if (document.visibilityState === "hidden") void doSave();
+      if (document.visibilityState === "hidden") flush();
     };
-    window.addEventListener("beforeunload", flushBeacon);
+    window.addEventListener("beforeunload", flush);
     document.addEventListener("visibilitychange", onVisibility);
     return () => {
-      window.removeEventListener("beforeunload", flushBeacon);
+      window.removeEventListener("beforeunload", flush);
       document.removeEventListener("visibilitychange", onVisibility);
     };
   }, [boardId, doSave]);
@@ -218,6 +222,7 @@ export default function Editor({ boardId }: { boardId: string }) {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ name: trimmed }),
+        keepalive: true, // survive a tab close that happens right after the field blurs
       });
       if (!res.ok) throw new Error();
       savedNameRef.current = trimmed;
@@ -234,6 +239,7 @@ export default function Editor({ boardId }: { boardId: string }) {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ is_public: next }),
+        keepalive: true,
       });
       if (!res.ok) throw new Error();
     } catch {
@@ -283,6 +289,9 @@ export default function Editor({ boardId }: { boardId: string }) {
       }
       api.updateScene({ elements: scene.elements, appState: scene.appState });
       if (scene.files) api.addFiles(Object.values(scene.files));
+      // Adopt the imported scene as the baseline so the async onChange updateScene fires
+      // is recognized as a no-op; the explicit doSave below is the single write.
+      lastSavedSigRef.current = computeSig(api.getSceneElements(), api.getAppState(), api.getFiles());
       suspendRef.current = false;
       void doSave(); // persist the imported replacement via PUT
     } catch {

@@ -110,6 +110,11 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
 
     // Only an is_deleted change is allowed to reach a soft-deleted (trashed) board.
     const row = hasDeleted ? await fetchAnyBoardRow(id) : await fetchActiveBoardRow(id);
+    if (row.is_deleted && (hasName || hasPublic)) {
+      // A trashed board may only have its is_deleted flag flipped — not be renamed or
+      // re-published — even when those fields are bundled with is_deleted.
+      throw new HttpError("not_found", "Board not found.");
+    }
 
     const { data, error } = await supabase
       .from("boards")
@@ -135,9 +140,11 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
 
     if (hard === "1") {
       const row = await fetchAnyBoardRow(id); // hard delete can target a trash board
-      await deleteBoardImages(row.id);
+      // Delete the row FIRST (snapshots cascade); only then remove Storage objects, so a
+      // failed row delete can't leave a live board pointing at already-deleted images.
       const { error } = await supabase.from("boards").delete().eq("id", row.id);
       if (error) throw error;
+      await deleteBoardImages(row.id);
       return apiOk({ ok: true, id: row.id, hard: true });
     }
 

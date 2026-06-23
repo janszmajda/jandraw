@@ -1,5 +1,5 @@
 import { supabase } from "./supabase";
-import { extractAndStoreImages, rehydrateImages } from "./images";
+import { extractAndStoreImages, rehydrateImages, deleteBoardImages } from "./images";
 import { sanitizeAppState } from "./appState";
 import { slugify, randomToken, randomSuffix } from "./slug";
 import { HttpError } from "./http";
@@ -135,7 +135,15 @@ export async function saveScene(
           "Scene version mismatch — the board changed since you loaded it.",
         );
       }
-      if ((error as { code?: string }).code !== "42883") throw error; // 42883 = function not installed → fall back
+      // "Function not installed" can surface as Postgres 42883 OR PostgREST's PGRST202
+      // schema-cache miss — treat either as the signal to fall back to the plain save.
+      const code = (error as { code?: string }).code;
+      const notInstalled =
+        code === "42883" ||
+        code === "PGRST202" ||
+        (typeof error.message === "string" &&
+          /schema cache|could not find the function/i.test(error.message));
+      if (!notInstalled) throw error;
     } else {
       if (data === null || data === undefined) throw new HttpError("not_found", "Board not found.");
       return Number(data);
@@ -225,15 +233,23 @@ export async function createBoard(input: CreateBoardInput): Promise<FullBoard> {
   // Now that the final id is known, store any inline images and persist refs.
   const files = input.files ?? {};
   if (files && Object.keys(files).length > 0) {
-    const stored = await extractAndStoreImages(row.id, files);
-    const { data, error } = await supabase
-      .from("boards")
-      .update({ files: stored })
-      .eq("id", row.id)
-      .select(COLUMNS)
-      .single();
-    if (error) throw error;
-    row = data as BoardRow;
+    try {
+      const stored = await extractAndStoreImages(row.id, files);
+      const { data, error } = await supabase
+        .from("boards")
+        .update({ files: stored })
+        .eq("id", row.id)
+        .select(COLUMNS)
+        .single();
+      if (error) throw error;
+      row = data as BoardRow;
+    } catch (e) {
+      // Roll back the just-inserted row (and any uploaded objects) so a failed create
+      // persists nothing — the error returned to the client then matches reality.
+      await deleteBoardImages(row.id).catch(() => {});
+      await supabase.from("boards").delete().eq("id", row.id);
+      throw e;
+    }
   }
 
   return toFullBoard(row);

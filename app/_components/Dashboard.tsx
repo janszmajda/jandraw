@@ -18,7 +18,8 @@ type BoardSummary = {
 
 export default function Dashboard() {
   const router = useRouter();
-  const { theme, toggle } = useTheme();
+  const { theme, toggle, mounted } = useTheme();
+  const loadIdRef = useRef(0);
   const [boards, setBoards] = useState<BoardSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -31,6 +32,7 @@ export default function Dashboard() {
   const [rowError, setRowError] = useState<Record<string, string>>({});
 
   const load = useCallback(async () => {
+    const myId = ++loadIdRef.current; // only the latest load may mutate state
     setLoading(true);
     setError(false);
     try {
@@ -40,11 +42,12 @@ export default function Dashboard() {
       const res = await fetch(`/api/boards?${params.toString()}`);
       if (!res.ok) throw new Error("load failed");
       const data = await res.json();
+      if (myId !== loadIdRef.current) return; // a newer load superseded this one
       setBoards(data.boards ?? []);
     } catch {
-      setError(true);
+      if (myId === loadIdRef.current) setError(true);
     } finally {
-      setLoading(false);
+      if (myId === loadIdRef.current) setLoading(false);
     }
   }, [q, trash]);
 
@@ -157,7 +160,7 @@ export default function Dashboard() {
           title="Toggle dark mode"
           className="rounded-lg border border-black/15 px-3 py-1.5 text-sm transition hover:bg-black/5 dark:border-white/20 dark:hover:bg-white/10"
         >
-          {theme === "dark" ? "☀ Light" : "🌙 Dark"}
+          {!mounted ? "Theme" : theme === "dark" ? "☀ Light" : "🌙 Dark"}
         </button>
         <button
           onClick={newBoard}

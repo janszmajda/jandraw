@@ -39,7 +39,7 @@ export async function POST(req: NextRequest, ctx: Ctx) {
     );
     const merged = [
       ...currentElements(row).filter((e) => !incomingById.has(String(e.id))),
-      ...incoming,
+      ...incomingById.values(), // deduped (last-wins) so duplicate ids within the request collapse to one
     ];
     const version = await saveScene(id, merged, row.app_state, row.files, expected);
     const fresh = await fetchActiveBoardRow(id);

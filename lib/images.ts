@@ -12,50 +12,64 @@ type FileEntry = Record<string, unknown>;
 type FilesMap = Record<string, FileEntry>;
 
 const DEFAULT_MIME = "image/png";
+const MIME_RE = /^[\w.+-]+\/[\w.+-]+$/; // a real type/subtype; rejects header-injection chars
+
+function safeMime(v: unknown): string {
+  return typeof v === "string" && MIME_RE.test(v) ? v : DEFAULT_MIME;
+}
+
+// Distinguish a genuinely-absent object (degrade: drop it) from a transient/unknown
+// Storage failure (fail loud: rethrow), so a momentary blip never returns a lossy
+// scene that the editor's autosave would then persist as a permanent reference loss.
+function isMissingObject(e: unknown): boolean {
+  if (e instanceof Error && e.message === "missing object") return true;
+  const o = e as { status?: number | string; statusCode?: number | string; message?: string } | null;
+  const status = String(o?.status ?? o?.statusCode ?? "");
+  return status === "404" || status === "400" || /not.?found|does not exist|no such/i.test(String(o?.message ?? ""));
+}
 
 // Runs before any board write that carries a files map (PUT, element ops, import).
-// Uploads new inline images and returns a reference-only map to persist. Enforces
-// the invariant that boards.files never contains a dataURL AND that a `stored: true`
-// reference always has a backing Storage object (so reads can't brick the board).
-export async function extractAndStoreImages(
-  boardId: string,
-  files: FilesMap,
-): Promise<FilesMap> {
+// Uploads new inline images and returns a reference-only map. Enforces that a
+// `stored: true` reference always has a backing Storage object (so reads can't brick
+// the board) and never persists a dataURL.
+export async function extractAndStoreImages(boardId: string, files: FilesMap): Promise<FilesMap> {
   const out: FilesMap = {};
 
   for (const [fileId, entry] of Object.entries(files ?? {})) {
-    // Already a stored reference from a prior write: keep as-is, do not re-upload.
-    if (entry?.stored === true) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      throw new HttpError("bad_request", `Invalid files entry for ${fileId}: must be an object.`);
+    }
+    const inlineDataURL =
+      typeof entry.dataURL === "string" && entry.dataURL.startsWith("data:") ? entry.dataURL : null;
+
+    // Existing stored reference with no fresh inline bytes: keep as-is, do not re-upload.
+    // (If it ALSO carries a dataURL, fall through and upload the bytes so the reference
+    // always has a backing object.)
+    if (entry.stored === true && !inlineDataURL) {
       out[fileId] = {
         id: entry.id ?? fileId,
-        mimeType: entry.mimeType,
+        mimeType: safeMime(entry.mimeType),
         created: entry.created ?? Date.now(),
         stored: true,
       };
       continue;
     }
 
-    const dataURL = entry?.dataURL;
-    if (typeof dataURL === "string" && dataURL.startsWith("data:")) {
-      const comma = dataURL.indexOf(",");
+    if (inlineDataURL) {
+      const comma = inlineDataURL.indexOf(",");
       if (comma < 0) {
-        // No payload separator — malformed client input, not a server fault.
         throw new HttpError("bad_request", `Malformed data URL for file ${fileId}: missing payload.`);
       }
-      // Excalidraw image data URLs are always base64-encoded. Guard on that so we
-      // never decode a non-base64 payload (e.g. data:image/svg+xml,<raw>) as base64
-      // and store corrupt bytes. This is client-supplied input → 400, not 500.
-      const header = dataURL.slice(5, comma); // e.g. "image/png;base64"
+      // Excalidraw image data URLs are always base64-encoded; guard so we never decode
+      // a non-base64 payload as base64. Client input → 400, not 500.
+      const header = inlineDataURL.slice(5, comma); // e.g. "image/png;base64"
       if (!header.includes(";base64")) {
-        throw new HttpError(
-          "bad_request",
-          `Unsupported data URL for file ${fileId}: expected base64 encoding.`,
-        );
+        throw new HttpError("bad_request", `Unsupported data URL for file ${fileId}: expected base64 encoding.`);
       }
-      const mimeType =
-        (typeof entry.mimeType === "string" && entry.mimeType) || header.split(";")[0] || DEFAULT_MIME;
-      const base64 = dataURL.slice(comma + 1);
-      const bytes = Buffer.from(base64, "base64");
+      const mimeType = safeMime(
+        (typeof entry.mimeType === "string" && entry.mimeType) || header.split(";")[0],
+      );
+      const bytes = Buffer.from(inlineDataURL.slice(comma + 1), "base64");
 
       const { error } = await supabase.storage
         .from(BOARD_IMAGES_BUCKET)
@@ -64,24 +78,21 @@ export async function extractAndStoreImages(
 
       out[fileId] = { id: fileId, mimeType, created: entry.created ?? Date.now(), stored: true };
     } else {
-      // No inline bytes and not already stored: we have NOTHING to upload, so we must
-      // NOT mark it stored:true (that would create a reference with no Storage object,
-      // which bricks every future read). Pass it through WITHOUT `stored`, so
-      // rehydrateImages treats it as inline/pass-through and never tries to download.
-      const rest = { ...(entry ?? {}) };
-      delete (rest as Record<string, unknown>).dataURL;
-      delete (rest as Record<string, unknown>).stored;
+      // No inline bytes and not a stored ref: pass through WITHOUT `stored` so a future
+      // read never tries to download a non-existent object.
+      const rest = { ...entry };
+      delete rest.dataURL;
+      delete rest.stored;
       out[fileId] = { ...rest, id: rest.id ?? fileId };
     }
   }
 
-  return out; // store this in boards.files
+  return out;
 }
 
-// Runs on the read side (GET board, view, export) before handing files to the
-// editor/view/export. Downloads each stored object and rebuilds a full inline entry.
-// A single missing/failed object degrades to "skip that image" instead of failing the
-// whole board, so one lost object can never make a board unreadable.
+// Read side (GET board, view, export): download each stored object and rebuild the
+// inline entry. A genuinely-missing object is dropped (board still loads); a transient
+// failure rethrows so we never hand back a lossy scene.
 export async function rehydrateImages(boardId: string, files: FilesMap): Promise<FilesMap> {
   const out: FilesMap = {};
 
@@ -93,18 +104,20 @@ export async function rehydrateImages(boardId: string, files: FilesMap): Promise
           .download(`${boardId}/${fileId}`);
         if (error || !data) throw error ?? new Error("missing object");
         const bytes = Buffer.from(await data.arrayBuffer());
-        const base64 = bytes.toString("base64");
-        const mimeType = (typeof entry.mimeType === "string" && entry.mimeType) || DEFAULT_MIME;
+        const mimeType = safeMime(entry.mimeType);
         out[fileId] = {
-          id: fileId, // preserve id so image elements still resolve
-          dataURL: `data:${mimeType};base64,${base64}`,
+          id: fileId,
+          dataURL: `data:${mimeType};base64,${bytes.toString("base64")}`,
           mimeType,
           created: entry.created ?? Date.now(),
           lastRetrieved: Date.now(),
         };
       } catch (e) {
-        // Degrade gracefully: drop this one image so the rest of the board still loads.
-        console.warn(`[jandraw] rehydrate failed for ${boardId}/${fileId}:`, e);
+        if (isMissingObject(e)) {
+          console.warn(`[jandraw] image object missing for ${boardId}/${fileId}; dropping reference`);
+        } else {
+          throw e; // transient/unknown — fail loud, don't return a lossy scene
+        }
       }
     } else {
       out[fileId] = entry; // already full / inline: pass through
@@ -114,10 +127,9 @@ export async function rehydrateImages(boardId: string, files: FilesMap): Promise
   return out;
 }
 
-// Hard-delete only (A.9): remove all Storage objects under `{boardId}/`. `.remove`
-// needs explicit paths and cannot delete a bare prefix. We always list from the start
-// and delete the head batch until the prefix is empty — advancing an offset is wrong
-// because each remove() shifts the listing window.
+// Hard-delete only (A.9): remove all Storage objects under `{boardId}/`. Always list
+// from the start and delete the head batch until empty (advancing an offset is wrong
+// because each remove() shifts the listing window).
 export async function deleteBoardImages(boardId: string): Promise<void> {
   const limit = 100;
   for (let guard = 0; guard < 10000; guard++) {
@@ -131,6 +143,6 @@ export async function deleteBoardImages(boardId: string): Promise<void> {
     const { error: rmError } = await supabase.storage.from(BOARD_IMAGES_BUCKET).remove(paths);
     if (rmError) throw rmError;
 
-    if (data.length < limit) break; // last (short) page
+    if (data.length < limit) break;
   }
 }

@@ -17,24 +17,31 @@ import { z } from "zod";
 
 // ---- env loading (fallback to .env.local if not already in the environment) ----
 function loadEnvFallback() {
-  if (process.env.JANDRAW_EDIT_SECRET) return;
+  // Always read .env.local (don't short-circuit on JANDRAW_EDIT_SECRET) so other keys
+  // like JANDRAW_API_URL still load when only the secret is set in the real environment.
+  // The per-key `=== undefined` guard means real env vars are never overridden.
   const here = dirname(fileURLToPath(import.meta.url));
   const candidates = [join(process.cwd(), ".env.local"), join(here, "..", ".env.local")];
   for (const file of candidates) {
+    let txt;
     try {
-      const txt = readFileSync(file, "utf8");
-      for (const line of txt.split(/\r?\n/)) {
-        const m = /^\s*([A-Za-z0-9_]+)\s*=\s*(.*)\s*$/.exec(line);
-        if (m && process.env[m[1]] === undefined) {
-          const v = m[2];
-          // strip quotes only when they wrap the WHOLE value (not a stray leading/trailing one)
-          process.env[m[1]] = /^"[\s\S]*"$|^'[\s\S]*'$/.test(v) ? v.slice(1, -1) : v;
-        }
-      }
-      if (process.env.JANDRAW_EDIT_SECRET) return;
+      txt = readFileSync(file, "utf8");
     } catch {
-      /* try next candidate */
+      continue; // try next candidate
     }
+    for (const line of txt.split(/\r?\n/)) {
+      // tolerate an optional `export ` prefix; non-greedy value so trailing space is trimmed
+      const m = /^\s*(?:export\s+)?([A-Za-z0-9_]+)\s*=\s*(.*?)\s*$/.exec(line);
+      if (m && process.env[m[1]] === undefined) {
+        const v = m[2];
+        const q = v[0];
+        // strip quotes only when they truly wrap the value (and the body has no inner copy)
+        const wrapped =
+          v.length >= 2 && (q === '"' || q === "'") && v.at(-1) === q && !v.slice(1, -1).includes(q);
+        process.env[m[1]] = wrapped ? v.slice(1, -1) : v;
+      }
+    }
+    break; // first readable .env.local wins
   }
 }
 loadEnvFallback();
@@ -67,8 +74,11 @@ async function api(method, path, body) {
   }
   if (!res.ok) {
     const err = data && typeof data === "object" ? data.error : null;
-    const msg = err && err.code && err.message ? `${err.code}: ${err.message}` : `HTTP ${res.status}`;
-    throw new Error(msg);
+    let detail = "";
+    if (err && err.code && err.message) detail = `${err.code}: ${err.message}`;
+    else if (typeof data === "string" && data.trim()) detail = data.slice(0, 500);
+    else if (data && typeof data === "object") detail = JSON.stringify(data).slice(0, 500);
+    throw new Error(detail ? `HTTP ${res.status}: ${detail}` : `HTTP ${res.status}`);
   }
   return data;
 }

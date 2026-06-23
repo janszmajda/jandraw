@@ -26,13 +26,20 @@ function apply(theme: Theme): void {
   document.documentElement.classList.toggle("dark", theme === "dark");
 }
 
-export function useTheme(): { theme: Theme; setTheme: (t: Theme) => void; toggle: () => void } {
+export function useTheme(): {
+  theme: Theme;
+  mounted: boolean;
+  setTheme: (t: Theme) => void;
+  toggle: () => void;
+} {
   const [theme, setThemeState] = useState<Theme>("light");
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
     const t = read();
     setThemeState(t);
     apply(t);
+    setMounted(true);
     const onChange = () => setThemeState(read());
     window.addEventListener(EVENT, onChange);
     window.addEventListener("storage", onChange);
@@ -56,5 +63,5 @@ export function useTheme(): { theme: Theme; setTheme: (t: Theme) => void; toggle
   const toggle = () =>
     setTheme(document.documentElement.classList.contains("dark") ? "light" : "dark");
 
-  return { theme, setTheme, toggle };
+  return { theme, mounted, setTheme, toggle };
 }
