@@ -75,6 +75,15 @@ export default function Editor({ boardId }: { boardId: string }) {
   const baselineSetRef = useRef(false);
   const inFlightRef = useRef<Promise<void> | null>(null);
   const suspendRef = useRef(false);
+  const mountedRef = useRef(true);
+  // The last scene the LIVE canvas reported via onChange. Saves read from this, never from
+  // the Excalidraw API: a torn-down Excalidraw returns an empty scene from getSceneElements(),
+  // and a late save reading that empty scene was overwriting boards with a blank canvas on exit.
+  const latestSceneRef = useRef<{
+    elements: readonly { id?: string; version?: number; isDeleted?: boolean }[];
+    appState: Record<string, unknown>;
+    files: Record<string, unknown>;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // ---- Load the board scene once ----
@@ -112,6 +121,15 @@ export default function Editor({ boardId }: { boardId: string }) {
     nameRef.current = name;
   }, [name]);
 
+  // Track mount state so a save scheduled before unmount (e.g. a pending debounce) can't
+  // run against a torn-down canvas after the user navigates away.
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+
   // Suspend autosave (ref, read synchronously) AND lock the canvas (state -> viewModeEnabled)
   // so the user can't draw into a scene that restore/import is about to replace.
   const setSuspend = (v: boolean) => {
@@ -122,7 +140,10 @@ export default function Editor({ boardId }: { boardId: string }) {
   // ---- Autosave (serialized, latest-wins) ----
   const doSave = useCallback(async () => {
     const api = apiRef.current;
-    if (!api || suspendRef.current) return;
+    // Bail once unmounted: a pending debounce must not fire a save against a torn-down
+    // Excalidraw (which returns an empty scene). The unmount cleanup persists the final
+    // edit from latestSceneRef instead.
+    if (!api || suspendRef.current || !mountedRef.current) return;
     const elements = api.getSceneElements();
     const appState = api.getAppState();
     const files = api.getFiles();
@@ -175,6 +196,10 @@ export default function Editor({ boardId }: { boardId: string }) {
       files: Record<string, unknown>,
     ) => {
       if (!readyRef.current || suspendRef.current) return;
+      // Snapshot the live scene (non-deleted, matching getSceneElements) so any later save —
+      // including the final one on unmount — persists THIS, never the empty scene a
+      // torn-down Excalidraw API returns.
+      latestSceneRef.current = { elements: elements.filter((e) => !e?.isDeleted), appState, files };
       const sig = computeSig(elements, appState, files);
       // Excalidraw fires onChange on mount with its normalized scene (grid/defaults
       // filled in) which differs from the stored scene. Adopt that first emission as
@@ -227,14 +252,14 @@ export default function Editor({ boardId }: { boardId: string }) {
 
       // Real CLOSE: the in-flight non-keepalive PUT is cancelled by the unload, so send the
       // latest scene now via keepalive (byte-capped at ~64KB; over it is the one unavoidable
-      // close-time gap). Guard the baseline so a late keepalive can't clobber a newer
+      // close-time gap). Read from latestSceneRef, not the API, so a stray empty read can
+      // never blank the board. Guard the baseline so a late keepalive can't clobber a newer
       // import/restore baseline if the page happens to survive.
-      const elements = api.getSceneElements();
-      const appState = api.getAppState();
-      const files = api.getFiles();
-      const sig = computeSig(elements, appState, files);
+      const scene = latestSceneRef.current;
+      if (!scene) return;
+      const sig = computeSig(scene.elements, scene.appState, scene.files);
       if (sig === lastSavedSigRef.current) return;
-      const body = JSON.stringify({ elements, app_state: appState, files });
+      const body = JSON.stringify({ elements: scene.elements, app_state: scene.appState, files: scene.files });
       if (new TextEncoder().encode(body).length < 60000) {
         const baseline = lastSavedSigRef.current;
         fetch(`/api/boards/${boardId}`, {
@@ -260,6 +285,30 @@ export default function Editor({ boardId }: { boardId: string }) {
     return () => {
       window.removeEventListener("beforeunload", onBeforeUnload);
       document.removeEventListener("visibilitychange", onVisibility);
+      // Client-side unmount (e.g. clicking "‹ Back"): a real page close is handled by
+      // beforeunload above and never runs this cleanup. Cancel any pending debounce, then
+      // persist the last live scene if it's dirty — from latestSceneRef, NOT the Excalidraw
+      // API (whose post-unmount empty read is exactly what blanked boards on exit). A normal
+      // fetch survives an in-app navigation, with no keepalive size cap, so large boards save too.
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      const scene = latestSceneRef.current;
+      if (readyRef.current && scene) {
+        const sig = computeSig(scene.elements, scene.appState, scene.files);
+        if (sig !== lastSavedSigRef.current) {
+          fetch(`/api/boards/${boardId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              elements: scene.elements,
+              app_state: scene.appState,
+              files: scene.files,
+            }),
+          }).catch(() => {});
+        }
+      }
     };
   }, [boardId, doSave]);
 
@@ -351,6 +400,13 @@ export default function Editor({ boardId }: { boardId: string }) {
       // Adopt the imported scene as the baseline so the async onChange updateScene fires
       // is recognized as a no-op; the explicit doSave below is the single write.
       lastSavedSigRef.current = computeSig(api.getSceneElements(), api.getAppState(), api.getFiles());
+      // Keep latestSceneRef on the imported scene too, so a Back-nav unmount-flush can't
+      // resurrect the pre-import scene.
+      latestSceneRef.current = {
+        elements: api.getSceneElements(),
+        appState: api.getAppState(),
+        files: api.getFiles(),
+      };
       setSuspend(false);
       void doSave(); // persist the imported replacement via PUT
     } catch {
@@ -401,6 +457,13 @@ export default function Editor({ boardId }: { boardId: string }) {
           api.getAppState(),
           api.getFiles(),
         );
+        // Keep latestSceneRef on the restored scene so a Back-nav unmount-flush can't
+        // resurrect the pre-restore scene over the just-restored (already-persisted) one.
+        latestSceneRef.current = {
+          elements: api.getSceneElements(),
+          appState: api.getAppState(),
+          files: api.getFiles(),
+        };
       }
       setSaveStatus("saved");
       setShowHistory(false);
