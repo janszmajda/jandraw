@@ -38,7 +38,7 @@ Dependencies are installed in this folder: `cd mcp && npm install`.
     "jandraw": {
       "command": "node",
       "args": ["mcp/server.mjs"],
-      "env": { "JANDRAW_API_URL": "http://localhost:3000" }
+      "env": { "JANDRAW_API_URL": "https://jandraw.vercel.app" }
     }
   }
 }
@@ -60,7 +60,7 @@ Add an equivalent stdio server entry, pointing `args` at the absolute path of
       "command": "node",
       "args": ["C:\\Users\\jan\\Documents\\jandraw\\mcp\\server.mjs"],
       "env": {
-        "JANDRAW_API_URL": "https://<your-project>.vercel.app",
+        "JANDRAW_API_URL": "https://jandraw.vercel.app",
         "JANDRAW_EDIT_SECRET": "<your edit secret>"
       }
     }

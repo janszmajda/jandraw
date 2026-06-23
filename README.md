@@ -80,7 +80,7 @@ The repo includes `.mcp.json`:
     "jandraw": {
       "command": "node",
       "args": ["mcp/server.mjs"],
-      "env": { "JANDRAW_API_URL": "https://your-app.vercel.app" }
+      "env": { "JANDRAW_API_URL": "https://jandraw.vercel.app" }
     }
   }
 }
@@ -106,7 +106,7 @@ Use absolute paths if the client is not launched from this repo:
       "command": "node",
       "args": ["/absolute/path/to/jandraw/mcp/server.mjs"],
       "env": {
-        "JANDRAW_API_URL": "https://your-app.vercel.app",
+        "JANDRAW_API_URL": "https://jandraw.vercel.app",
         "JANDRAW_EDIT_SECRET": "your-edit-passphrase"
       }
     }
@@ -117,7 +117,7 @@ Use absolute paths if the client is not launched from this repo:
 ### Verify
 
 ```bash
-JANDRAW_API_URL=https://your-app.vercel.app node scripts/mcp-smoke.mjs
+JANDRAW_API_URL=https://jandraw.vercel.app node scripts/mcp-smoke.mjs
 ```
 
 Expected output:
@@ -165,7 +165,7 @@ Run the HTTP regression suite:
 
 ```bash
 bash scripts/regression.sh
-JANDRAW_API_URL=https://your-app.vercel.app JANDRAW_EDIT_SECRET=<secret> bash scripts/regression.sh
+JANDRAW_API_URL=https://jandraw.vercel.app JANDRAW_EDIT_SECRET=<secret> bash scripts/regression.sh
 ```
 
 ### 4. Deploy on Vercel
