@@ -1,7 +1,7 @@
 import type { NextRequest } from "next/server";
 import { handle, apiOk, readJson, HttpError } from "@/lib/http";
 import { requireAuth } from "@/lib/auth";
-import { fetchActiveBoardRow, toFullBoard, saveScene } from "@/lib/boards";
+import { fetchActiveBoardRow, toFullBoardSafe, saveScene } from "@/lib/boards";
 import { expectArray, assertVersion, isPlainObject } from "@/lib/validate";
 
 type Ctx = { params: Promise<{ id: string }> };
@@ -32,18 +32,24 @@ export async function POST(req: NextRequest, ctx: Ctx) {
       typeof body.expected_scene_version === "number" ? body.expected_scene_version : undefined;
     assertVersion(body.expected_scene_version, Number(row.scene_version));
 
-    // Upsert by id so a re-POST of an existing id replaces it (kept on top) rather than
-    // creating a duplicate id; keeps adds idempotent and preserves the by-id invariant.
+    // POST is append-only: it adds NEW elements on top. Reject any incoming id that
+    // already exists (the caller should PATCH to edit) so we never silently replace an
+    // element or change its z-order. Duplicate ids WITHIN the request collapse (last-wins).
     const incomingById = new Map(
       incoming.map((e) => [String((e as Record<string, unknown>).id), e]),
     );
-    const merged = [
-      ...currentElements(row).filter((e) => !incomingById.has(String(e.id))),
-      ...incomingById.values(), // deduped (last-wins) so duplicate ids within the request collapse to one
-    ];
-    const version = await saveScene(id, merged, row.app_state, row.files, expected);
+    const current = currentElements(row);
+    const existingIds = new Set(current.map((e) => String(e.id)));
+    for (const eid of incomingById.keys()) {
+      if (existingIds.has(eid)) {
+        throw new HttpError("bad_request", `Element ${eid} already exists; use PATCH to update it.`);
+      }
+    }
+    const merged = [...current, ...incomingById.values()];
+    await saveScene(id, merged, row.app_state, row.files, expected);
     const fresh = await fetchActiveBoardRow(id);
-    return apiOk({ scene_version: version, board: await toFullBoard(fresh) });
+    const board = await toFullBoardSafe(fresh);
+    return apiOk({ scene_version: board.scene_version, board });
   });
 }
 
@@ -84,9 +90,10 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       const u = byId.get(String(e.id));
       return u ? { ...e, ...u } : e; // shallow top-level overwrite
     });
-    const version = await saveScene(id, merged, row.app_state, row.files, expected);
+    await saveScene(id, merged, row.app_state, row.files, expected);
     const fresh = await fetchActiveBoardRow(id);
-    return apiOk({ scene_version: version, board: await toFullBoard(fresh) });
+    const board = await toFullBoardSafe(fresh);
+    return apiOk({ scene_version: board.scene_version, board });
   });
 }
 
@@ -118,8 +125,9 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
     const remaining = current.filter((e) => !idSet.has(String(e.id)));
     const removed = current.length - remaining.length;
 
-    const version = await saveScene(id, remaining, row.app_state, row.files, expected);
+    await saveScene(id, remaining, row.app_state, row.files, expected);
     const fresh = await fetchActiveBoardRow(id);
-    return apiOk({ scene_version: version, removed, board: await toFullBoard(fresh) });
+    const board = await toFullBoardSafe(fresh);
+    return apiOk({ scene_version: board.scene_version, removed, board });
   });
 }

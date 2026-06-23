@@ -2,7 +2,7 @@ import type { NextRequest } from "next/server";
 import { handle, apiOk, readJson, HttpError } from "@/lib/http";
 import { requireAuth } from "@/lib/auth";
 import { createBoard } from "@/lib/boards";
-import { isPlainObject } from "@/lib/validate";
+import { isPlainObject, validateName } from "@/lib/validate";
 
 const MAX_BYTES = 5 * 1024 * 1024; // 5 MB
 
@@ -62,7 +62,7 @@ export async function POST(req: NextRequest) {
         : fallbackName || "Imported board";
 
     const board = await createBoard({
-      name,
+      name: validateName(name), // same non-empty + max-200 rule as create/rename
       elements: scene.elements,
       app_state: isPlainObject(scene.appState) ? scene.appState : {},
       files: (isPlainObject(scene.files) ? scene.files : {}) as Record<

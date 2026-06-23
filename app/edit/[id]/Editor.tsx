@@ -59,6 +59,7 @@ export default function Editor({ boardId }: { boardId: string }) {
   const apiRef = useRef<any>(null);
   const lastSavedSigRef = useRef<string>("");
   const savedNameRef = useRef<string>("");
+  const nameRef = useRef<string>("");
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savingRef = useRef(false);
   const pendingRef = useRef(false);
@@ -98,10 +99,24 @@ export default function Editor({ boardId }: { boardId: string }) {
     };
   }, [boardId]);
 
+  // Keep a ref of the current name so the close-time flush sees the latest value.
+  useEffect(() => {
+    nameRef.current = name;
+  }, [name]);
+
   // ---- Autosave (serialized, latest-wins) ----
   const doSave = useCallback(async () => {
     const api = apiRef.current;
     if (!api || suspendRef.current) return;
+    const elements = api.getSceneElements();
+    const appState = api.getAppState();
+    const files = api.getFiles();
+    const sig = computeSig(elements, appState, files);
+    // No-op if nothing changed (defends against redundant triggers from flush vs debounce).
+    if (sig === lastSavedSigRef.current) {
+      setSaveStatus("saved");
+      return;
+    }
     if (savingRef.current) {
       pendingRef.current = true;
       return;
@@ -110,10 +125,6 @@ export default function Editor({ boardId }: { boardId: string }) {
     setSaveStatus("saving");
     const work = (async () => {
       try {
-        const elements = api.getSceneElements();
-        const appState = api.getAppState();
-        const files = api.getFiles();
-        const sig = computeSig(elements, appState, files);
         const res = await fetch(`/api/boards/${boardId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
@@ -172,6 +183,26 @@ export default function Editor({ boardId }: { boardId: string }) {
       if (!readyRef.current) return;
       const api = apiRef.current;
       if (!api) return;
+      // Drop any pending debounced save so a late timer can't duplicate this flush.
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      // Persist a pending rename (typed but not yet blurred) via a tiny keepalive PATCH,
+      // independent of the scene so it doesn't trigger a snapshot / version bump.
+      const t = nameRef.current.trim();
+      if (t.length > 0 && t !== savedNameRef.current) {
+        fetch(`/api/boards/${boardId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ name: t }),
+          keepalive: true,
+        })
+          .then((res) => {
+            if (res.ok) savedNameRef.current = t;
+          })
+          .catch(() => {});
+      }
       const elements = api.getSceneElements();
       const appState = api.getAppState();
       const files = api.getFiles();

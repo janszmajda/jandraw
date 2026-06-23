@@ -62,6 +62,33 @@ export async function toFullBoard(row: BoardRow): Promise<FullBoard> {
   };
 }
 
+// Like toFullBoard but never throws on a rehydrate failure — used to build the response
+// AFTER a committed write so a transient Storage blip can't turn a successful write into a
+// 500 (which would make the client retry and double-commit). Degrades to reference-only files.
+export async function toFullBoardSafe(row: BoardRow): Promise<FullBoard> {
+  try {
+    return await toFullBoard(row);
+  } catch (e) {
+    console.warn("[jandraw] building response: rehydrate failed; returning reference-only files:", e);
+    return {
+      id: row.id,
+      name: row.name,
+      elements: Array.isArray(row.elements) ? row.elements : [],
+      app_state:
+        row.app_state && typeof row.app_state === "object"
+          ? (row.app_state as Record<string, unknown>)
+          : {},
+      files: (row.files ?? {}) as Record<string, unknown>,
+      is_public: row.is_public,
+      share_token: row.share_token,
+      is_deleted: row.is_deleted,
+      scene_version: Number(row.scene_version),
+      created_at: row.created_at,
+      updated_at: row.updated_at,
+    };
+  }
+}
+
 export function toSummary(row: Omit<BoardRow, "elements" | "app_state" | "files">): BoardSummary {
   return {
     id: row.id,
@@ -144,6 +171,9 @@ export async function saveScene(
         (typeof error.message === "string" &&
           /schema cache|could not find the function/i.test(error.message));
       if (!notInstalled) throw error;
+      console.warn(
+        "[jandraw] save_board_scene_checked not installed; expected_scene_version is enforced only by the pre-flight check. Run db/2026-06-22-atomic-version-check.sql for the atomic guard.",
+      );
     } else {
       if (data === null || data === undefined) throw new HttpError("not_found", "Board not found.");
       return Number(data);

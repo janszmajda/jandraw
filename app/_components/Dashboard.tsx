@@ -30,6 +30,7 @@ export default function Dashboard() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState("");
   const [rowError, setRowError] = useState<Record<string, string>>({});
+  const [createError, setCreateError] = useState(false);
 
   const load = useCallback(async () => {
     const myId = ++loadIdRef.current; // only the latest load may mutate state
@@ -59,6 +60,7 @@ export default function Dashboard() {
 
   async function newBoard() {
     setCreating(true);
+    setCreateError(false);
     try {
       const res = await fetch("/api/boards", {
         method: "POST",
@@ -70,7 +72,7 @@ export default function Dashboard() {
       router.push(`/edit/${board.id}`);
     } catch {
       setCreating(false);
-      setError(true);
+      setCreateError(true); // inline notice — do NOT wipe the loaded list with the global load error
     }
   }
 
@@ -170,6 +172,11 @@ export default function Dashboard() {
           {creating ? "Creating…" : "New board"}
         </button>
       </header>
+      {createError && (
+        <p className="mb-3 text-sm text-red-600 dark:text-red-400">
+          Could not create a board. Please try again.
+        </p>
+      )}
 
       {/* View switch */}
       <div className="mb-3 flex items-center justify-between border-b border-black/10 pb-2 dark:border-white/10">

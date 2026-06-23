@@ -24,8 +24,16 @@ function safeMime(v: unknown): string {
 function isMissingObject(e: unknown): boolean {
   if (e instanceof Error && e.message === "missing object") return true;
   const o = e as { status?: number | string; statusCode?: number | string; message?: string } | null;
-  const status = String(o?.status ?? o?.statusCode ?? "");
-  return status === "404" || status === "400" || /not.?found|does not exist|no such/i.test(String(o?.message ?? ""));
+  // Only a DEFINITIVE not-found degrades (drop the entry). Any other error — including a
+  // transient 400-class blip — rethrows so we never hand back a lossy scene that the
+  // editor's autosave would then persist as a permanent reference loss. Supabase reports
+  // a genuine miss with a "not found" message even when the HTTP status is 400, so the
+  // message regex (not a blanket 400) is what catches the real misses.
+  return (
+    String(o?.status ?? "") === "404" ||
+    String(o?.statusCode ?? "") === "404" ||
+    /not.?found|does not exist|no such/i.test(String(o?.message ?? ""))
+  );
 }
 
 // Runs before any board write that carries a files map (PUT, element ops, import).

@@ -83,10 +83,16 @@ function bearerToken(req: NextRequest): string | null {
 
 // Is this request authenticated (cookie OR bearer)? Checked bearer-first.
 export function isAuthed(req: NextRequest, now: number = Date.now()): boolean {
-  const token = bearerToken(req);
-  if (token && checkSecret(token)) return true;
-  const cookie = req.cookies.get(SESSION_COOKIE)?.value;
-  return verifySessionValue(cookie, now);
+  // Fail closed like the page gate: if the secret is unset/misconfigured (getSecret
+  // throws), treat the request as unauthenticated (401) rather than letting it 500.
+  try {
+    const token = bearerToken(req);
+    if (token && checkSecret(token)) return true;
+    const cookie = req.cookies.get(SESSION_COOKIE)?.value;
+    return verifySessionValue(cookie, now);
+  } catch {
+    return false;
+  }
 }
 
 // Throw a 401 unless the request is authenticated.

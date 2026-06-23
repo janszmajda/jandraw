@@ -38,7 +38,9 @@ function loadEnvFallback() {
         // strip quotes only when they truly wrap the value (and the body has no inner copy)
         const wrapped =
           v.length >= 2 && (q === '"' || q === "'") && v.at(-1) === q && !v.slice(1, -1).includes(q);
-        process.env[m[1]] = wrapped ? v.slice(1, -1) : v;
+        // quoted values keep their content verbatim; for unquoted values drop an inline
+        // " # comment" (whitespace-delimited, so a '#' inside a secret stays intact).
+        process.env[m[1]] = wrapped ? v.slice(1, -1) : v.replace(/\s+#.*$/, "");
       }
     }
     break; // first readable .env.local wins

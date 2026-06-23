@@ -6,6 +6,7 @@ import {
   fetchActiveBoardRow,
   fetchAnyBoardRow,
   toFullBoard,
+  toFullBoardSafe,
   saveScene,
   COLUMNS,
   type BoardRow,
@@ -58,7 +59,7 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
     assertVersion(body.expected_scene_version, Number(row.scene_version));
 
     // Scene write first (snapshots + version bump, atomic in save_board_scene[_checked]).
-    const version = await saveScene(
+    await saveScene(
       id,
       elements,
       appState,
@@ -66,18 +67,22 @@ export async function PUT(req: NextRequest, ctx: Ctx) {
       expected,
     );
 
-    // name / is_public applied only AFTER the scene write succeeds, so a failed scene
-    // write can't leave a committed rename/public-toggle when the client is told it failed.
+    // name / is_public applied only AFTER the scene write succeeds. The scene write is the
+    // durable change; if this secondary metadata update fails it is logged but NOT fatal,
+    // so we never return an error for an already-committed scene (which would make the
+    // client retry and double-bump the version). The re-fetched board reflects reality.
     const meta: Record<string, unknown> = {};
     if (cleanName !== undefined) meta.name = cleanName;
     if (body.is_public !== undefined) meta.is_public = body.is_public;
     if (Object.keys(meta).length > 0) {
       const { error } = await supabase.from("boards").update(meta).eq("id", id);
-      if (error) throw error;
+      if (error) console.warn("[jandraw] PUT metadata update failed (scene already saved):", error);
     }
 
     const fresh = await fetchActiveBoardRow(id);
-    return apiOk({ board: await toFullBoard(fresh), scene_version: version });
+    const board = await toFullBoardSafe(fresh);
+    // top-level scene_version mirrors the returned board so they can never disagree.
+    return apiOk({ board, scene_version: board.scene_version });
   });
 }
 
@@ -121,9 +126,10 @@ export async function PATCH(req: NextRequest, ctx: Ctx) {
       .update(update)
       .eq("id", row.id)
       .select(COLUMNS)
-      .single();
+      .maybeSingle();
     if (error) throw error;
-    return apiOk({ board: await toFullBoard(data as BoardRow) });
+    if (!data) throw new HttpError("not_found", "Board not found."); // concurrently hard-deleted
+    return apiOk({ board: await toFullBoardSafe(data as BoardRow) });
   });
 }
 
@@ -144,7 +150,13 @@ export async function DELETE(req: NextRequest, ctx: Ctx) {
       // failed row delete can't leave a live board pointing at already-deleted images.
       const { error } = await supabase.from("boards").delete().eq("id", row.id);
       if (error) throw error;
-      await deleteBoardImages(row.id);
+      // Storage cleanup is best-effort: the row is already gone, and orphaned objects are
+      // tolerated (A.7), so a cleanup failure must not turn a successful delete into a 500.
+      try {
+        await deleteBoardImages(row.id);
+      } catch (e) {
+        console.warn("[jandraw] hard-delete storage cleanup failed (objects orphaned) for", row.id, e);
+      }
       return apiOk({ ok: true, id: row.id, hard: true });
     }
 
