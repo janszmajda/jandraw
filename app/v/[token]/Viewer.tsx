@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import { useTheme } from "../../_lib/useTheme";
+import Logo from "../../_components/Logo";
 
 const ExcalidrawCanvas = dynamic(() => import("../../_components/ExcalidrawCanvas"), {
   ssr: false,
@@ -78,9 +79,12 @@ export default function Viewer({ token }: { token: string }) {
 
   return (
     <div className="flex h-screen flex-col">
-      <header className="flex items-center justify-between border-b border-black/10 px-4 py-2 dark:border-white/10">
-        <span className="truncate font-medium">{board?.name}</span>
-        <span className="text-xs opacity-60">read only view</span>
+      <header className="flex items-center gap-3 border-b border-black/[0.08] px-4 py-2.5 dark:border-white/10">
+        <Logo size="sm" withText={false} />
+        <span className="truncate font-medium tracking-tight">{board?.name}</span>
+        <span className="ml-auto rounded-full bg-black/[0.05] px-2.5 py-0.5 text-xs font-medium text-foreground/55 dark:bg-white/10">
+          Read-only
+        </span>
       </header>
       <div className="relative flex-1 min-h-0">
         <ExcalidrawCanvas

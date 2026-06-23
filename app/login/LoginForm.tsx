@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Logo from "../_components/Logo";
 
 export default function LoginForm() {
   const [secret, setSecret] = useState("");
@@ -36,37 +37,45 @@ export default function LoginForm() {
 
   return (
     <main className="flex min-h-full flex-1 items-center justify-center p-6">
-      <form
-        onSubmit={onSubmit}
-        className="w-full max-w-sm rounded-2xl border border-black/10 bg-white p-8 shadow-sm dark:border-white/15 dark:bg-neutral-900"
-      >
-        <h1 className="mb-6 text-center text-2xl font-semibold tracking-tight">Jandraw</h1>
+      <div className="w-full max-w-sm">
+        <div className="mb-7 flex flex-col items-center gap-3 text-center">
+          <Logo size="lg" withText={false} />
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Jandraw</h1>
+            <p className="mt-1 text-sm text-foreground/55">Sign in to your boards</p>
+          </div>
+        </div>
 
-        <label htmlFor="passphrase" className="mb-1 block text-sm font-medium opacity-80">
-          Passphrase
-        </label>
-        <input
-          id="passphrase"
-          type="password"
-          autoFocus
-          autoComplete="current-password"
-          value={secret}
-          onChange={(e) => setSecret(e.target.value)}
-          className="mb-4 w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 outline-none focus:border-blue-500 dark:border-white/20"
-        />
-
-        <button
-          type="submit"
-          disabled={loading || secret.length === 0}
-          className="w-full rounded-lg bg-blue-600 px-4 py-2 font-medium text-white transition hover:bg-blue-700 disabled:opacity-50"
+        <form
+          onSubmit={onSubmit}
+          className="rounded-2xl border border-black/[0.08] bg-white p-7 shadow-[0_1px_3px_rgba(0,0,0,0.04),0_8px_24px_-12px_rgba(0,0,0,0.12)] dark:border-white/10 dark:bg-neutral-900 dark:shadow-none"
         >
-          {loading ? "Signing in…" : "Sign in"}
-        </button>
+          <label htmlFor="passphrase" className="mb-1.5 block text-sm font-medium text-foreground/70">
+            Passphrase
+          </label>
+          <input
+            id="passphrase"
+            type="password"
+            autoFocus
+            autoComplete="current-password"
+            value={secret}
+            onChange={(e) => setSecret(e.target.value)}
+            className="mb-4 w-full rounded-lg border border-black/15 bg-transparent px-3 py-2 text-sm outline-none transition focus:border-accent focus:ring-2 focus:ring-accent/20 dark:border-white/20"
+          />
 
-        {error && (
-          <p className="mt-4 text-center text-sm text-red-600 dark:text-red-400">{error}</p>
-        )}
-      </form>
+          <button
+            type="submit"
+            disabled={loading || secret.length === 0}
+            className="w-full rounded-lg bg-accent px-4 py-2.5 text-sm font-medium text-white transition hover:bg-accent-hover disabled:opacity-50"
+          >
+            {loading ? "Signing in…" : "Sign in"}
+          </button>
+
+          {error && (
+            <p className="mt-4 text-center text-sm text-red-600 dark:text-red-400">{error}</p>
+          )}
+        </form>
+      </div>
     </main>
   );
 }

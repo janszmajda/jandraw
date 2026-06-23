@@ -482,7 +482,7 @@ export default function Editor({ boardId }: { boardId: string }) {
     return (
       <div className="flex min-h-full flex-1 flex-col items-center justify-center gap-3">
         <p className="opacity-80">Board not found.</p>
-        <Link href="/" className="text-blue-600 hover:underline dark:text-blue-400">
+        <Link href="/" className="text-accent hover:underline">
           Back to dashboard
         </Link>
       </div>
@@ -492,7 +492,7 @@ export default function Editor({ boardId }: { boardId: string }) {
     return (
       <div className="flex min-h-full flex-1 flex-col items-center justify-center gap-3">
         <p className="opacity-80">Could not load this board.</p>
-        <Link href="/" className="text-blue-600 hover:underline dark:text-blue-400">
+        <Link href="/" className="text-accent hover:underline">
           Back to dashboard
         </Link>
       </div>
@@ -506,14 +506,26 @@ export default function Editor({ boardId }: { boardId: string }) {
         ? "Save failed"
         : "Saved";
   const barBtn =
-    "rounded-md px-2 py-1 text-sm transition border border-black/10 hover:bg-black/5 dark:border-white/15 dark:hover:bg-white/10";
+    "rounded-md px-2.5 py-1 text-sm font-medium text-foreground/65 transition hover:bg-black/[0.05] hover:text-foreground dark:hover:bg-white/10";
+  const saveDot =
+    saveStatus === "failed"
+      ? "bg-red-500"
+      : saveStatus === "saving"
+        ? "bg-amber-400 animate-pulse"
+        : "bg-emerald-500";
 
   return (
     <div className="flex h-screen flex-col">
       {/* Top bar */}
-      <header className="flex flex-wrap items-center gap-2 border-b border-black/10 px-3 py-2 dark:border-white/10">
-        <Link href="/" className="text-sm opacity-70 hover:opacity-100">
-          ‹ Back
+      <header className="flex flex-wrap items-center gap-1 border-b border-black/[0.08] px-3 py-2 dark:border-white/10">
+        <Link
+          href="/"
+          aria-label="Back to dashboard"
+          className="mr-0.5 grid h-8 w-8 place-items-center rounded-md text-foreground/60 transition hover:bg-black/[0.05] hover:text-foreground dark:hover:bg-white/10"
+        >
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M15 18l-6-6 6-6" />
+          </svg>
         </Link>
         <input
           value={name}
@@ -522,17 +534,19 @@ export default function Editor({ boardId }: { boardId: string }) {
           onKeyDown={(e) => {
             if (e.key === "Enter") (e.target as HTMLInputElement).blur();
           }}
-          className="min-w-0 max-w-56 rounded-md border border-transparent bg-transparent px-2 py-1 text-sm font-medium outline-none hover:border-black/10 focus:border-blue-500 dark:hover:border-white/15"
+          className="min-w-0 max-w-56 rounded-md border border-transparent bg-transparent px-2 py-1 text-sm font-medium tracking-tight outline-none transition hover:border-black/10 focus:border-accent focus:ring-2 focus:ring-accent/20 dark:hover:border-white/15"
         />
 
-        <label className="flex items-center gap-1 text-sm">
-          <input type="checkbox" checked={isPublic} onChange={togglePublic} />
+        <span className="mx-1 h-5 w-px bg-black/10 dark:bg-white/15" />
+
+        <label className="flex select-none items-center gap-1.5 px-1 text-sm text-foreground/70">
+          <input type="checkbox" checked={isPublic} onChange={togglePublic} className="accent-accent" />
           Public
         </label>
 
-        <div className="relative flex items-center gap-1">
+        <div className="relative flex items-center gap-0.5">
           <button onClick={copyLink} className={barBtn}>
-            {copied ? "Copied" : "Copy link"}
+            {copied ? "Copied ✓" : "Copy link"}
           </button>
           <button
             onClick={() => setRotateOpen((o) => !o)}
@@ -542,10 +556,10 @@ export default function Editor({ boardId }: { boardId: string }) {
             ⋯
           </button>
           {rotateOpen && (
-            <div className="absolute right-0 top-9 z-10 w-48 rounded-lg border border-black/10 bg-white p-1 shadow-lg dark:border-white/15 dark:bg-neutral-900">
+            <div className="absolute right-0 top-9 z-10 w-48 rounded-lg border border-black/[0.08] bg-white p-1 shadow-lg dark:border-white/15 dark:bg-neutral-900">
               <button
                 onClick={rotateToken}
-                className="block w-full rounded-md px-2 py-1.5 text-left text-sm hover:bg-black/5 dark:hover:bg-white/10"
+                className="block w-full rounded-md px-2 py-1.5 text-left text-sm transition hover:bg-black/[0.05] dark:hover:bg-white/10"
               >
                 Rotate share link
               </button>
@@ -563,8 +577,11 @@ export default function Editor({ boardId }: { boardId: string }) {
           History
         </button>
 
-        <span className="ml-auto flex items-center gap-2 text-sm opacity-70">
-          {saveLabel}
+        <span className="ml-auto flex items-center gap-2 text-sm text-foreground/55">
+          <span className="flex items-center gap-1.5">
+            <span className={`h-1.5 w-1.5 rounded-full ${saveDot}`} />
+            {saveLabel}
+          </span>
           {saveStatus === "failed" && (
             <button onClick={() => void doSave()} className={barBtn}>
               Retry
