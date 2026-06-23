@@ -37,7 +37,14 @@ function computeSig(
     .join(",");
   const fSig = Object.keys(files ?? {}).sort().join(",");
   const a = (appState ?? {}) as Record<string, unknown>;
-  const aSig = SAVABLE_APPSTATE_KEYS.map((k) => `${k}:${JSON.stringify(a[k])}`).join(",");
+  // Fold in the canvas-visual keys AND every currentItem* style default (all persisted
+  // per A.10) so changing a default style (e.g. stroke color, font) autosaves — but NOT
+  // transient UI keys (activeTool, selection, scroll, zoom) which would cause save churn.
+  const keys = [
+    ...SAVABLE_APPSTATE_KEYS,
+    ...Object.keys(a).filter((k) => k.startsWith("currentItem")),
+  ].sort();
+  const aSig = keys.map((k) => `${k}:${JSON.stringify(a[k])}`).join(",");
   return `${eSig}||${fSig}||${aSig}`;
 }
 
@@ -208,6 +215,12 @@ export default function Editor({ boardId }: { boardId: string }) {
       const files = api.getFiles();
       const sig = computeSig(elements, appState, files);
       if (sig === lastSavedSigRef.current) return;
+      // If a debounced save is already in flight, defer to doSave's serialization instead
+      // of racing a second concurrent PUT (which could commit out of order / double-snapshot).
+      if (savingRef.current || inFlightRef.current) {
+        pendingRef.current = true;
+        return;
+      }
       const body = JSON.stringify({ elements, app_state: appState, files });
       // keepalive bodies are capped at ~64KB measured in BYTES (not UTF-16 units), so
       // size it with TextEncoder. Under the cap, use keepalive so the save survives a

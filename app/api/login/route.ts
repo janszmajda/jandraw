@@ -9,7 +9,13 @@ export async function POST(req: NextRequest) {
     if (typeof body.secret !== "string") {
       throw new HttpError("bad_request", "secret is required and must be a string.");
     }
-    if (!checkSecret(body.secret)) {
+    let ok = false;
+    try {
+      ok = checkSecret(body.secret);
+    } catch {
+      ok = false; // secret unset/misconfigured → fail closed (401), never 500
+    }
+    if (!ok) {
       throw new HttpError("unauthenticated", "Wrong passphrase.");
     }
     await setSessionCookie();

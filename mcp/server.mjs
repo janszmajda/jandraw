@@ -33,14 +33,20 @@ function loadEnvFallback() {
       // tolerate an optional `export ` prefix; non-greedy value so trailing space is trimmed
       const m = /^\s*(?:export\s+)?([A-Za-z0-9_]+)\s*=\s*(.*?)\s*$/.exec(line);
       if (m && process.env[m[1]] === undefined) {
-        const v = m[2];
-        const q = v[0];
-        // strip quotes only when they truly wrap the value (and the body has no inner copy)
-        const wrapped =
-          v.length >= 2 && (q === '"' || q === "'") && v.at(-1) === q && !v.slice(1, -1).includes(q);
-        // quoted values keep their content verbatim; for unquoted values drop an inline
-        // " # comment" (whitespace-delimited, so a '#' inside a secret stays intact).
-        process.env[m[1]] = wrapped ? v.slice(1, -1) : v.replace(/\s+#.*$/, "");
+        const raw = m[2];
+        const isWrapped = (s) =>
+          s.length >= 2 && (s[0] === '"' || s[0] === "'") && s.at(-1) === s[0] && !s.slice(1, -1).includes(s[0]);
+        // Quoted values keep content verbatim (inner '#' preserved). For unquoted values
+        // strip an inline " # comment" first, THEN re-check wrapping so `"val" # comment`
+        // unquotes correctly. A '#' with no preceding whitespace (e.g. inside a secret) stays.
+        let val;
+        if (isWrapped(raw)) {
+          val = raw.slice(1, -1);
+        } else {
+          const stripped = raw.replace(/\s+#.*$/, "");
+          val = isWrapped(stripped) ? stripped.slice(1, -1) : stripped;
+        }
+        process.env[m[1]] = val;
       }
     }
     break; // first readable .env.local wins
@@ -169,7 +175,7 @@ server.registerTool(
   "add_elements",
   {
     title: "Add elements",
-    description: "Append full Excalidraw element objects to a board. Array order is z-order; appended elements draw on top of everything. Each element needs at least an `id` and `type`.",
+    description: "Append NEW Excalidraw element objects to a board (array order is z-order; appended elements draw on top). Each element needs at least an `id` and `type`, and each id must NOT already exist on the board — use update_elements to edit an existing element (re-adding an existing id is rejected with 400).",
     inputSchema: {
       id: z.string().describe("the board slug/id"),
       elements: z.array(z.record(z.any())).describe("full Excalidraw element objects to append"),
@@ -286,7 +292,7 @@ server.registerTool(
   {
     title: "List snapshots",
     description: "List a board's history snapshots (newest first) for restore.",
-    inputSchema: { id: z.string(), limit: z.number().optional().describe("max 50") },
+    inputSchema: { id: z.string(), limit: z.number().int().positive().max(50).optional().describe("max 50") },
   },
   ({ id, limit }) =>
     run(async () => {

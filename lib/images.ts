@@ -18,6 +18,13 @@ function safeMime(v: unknown): string {
   return typeof v === "string" && MIME_RE.test(v) ? v : DEFAULT_MIME;
 }
 
+// fileId becomes a Storage object path segment (`{boardId}/{fileId}`). Reject anything
+// that isn't a flat safe token so a crafted imported scene can't write/read across
+// board folders via slashes or `..`. (Excalidraw fileIds are flat, so this is non-breaking.)
+function isSafeFileId(id: string): boolean {
+  return /^[A-Za-z0-9._-]+$/.test(id) && id !== "." && id !== "..";
+}
+
 // Distinguish a genuinely-absent object (degrade: drop it) from a transient/unknown
 // Storage failure (fail loud: rethrow), so a momentary blip never returns a lossy
 // scene that the editor's autosave would then persist as a permanent reference loss.
@@ -44,6 +51,9 @@ export async function extractAndStoreImages(boardId: string, files: FilesMap): P
   const out: FilesMap = {};
 
   for (const [fileId, entry] of Object.entries(files ?? {})) {
+    if (!isSafeFileId(fileId)) {
+      throw new HttpError("bad_request", `Invalid file id: ${fileId}`);
+    }
     if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
       throw new HttpError("bad_request", `Invalid files entry for ${fileId}: must be an object.`);
     }
@@ -105,6 +115,10 @@ export async function rehydrateImages(boardId: string, files: FilesMap): Promise
   const out: FilesMap = {};
 
   for (const [fileId, entry] of Object.entries(files ?? {})) {
+    if (!isSafeFileId(fileId)) {
+      console.warn(`[jandraw] skipping unsafe file id on read: ${fileId}`);
+      continue; // never download a cross-board / traversal path
+    }
     if (entry?.stored === true) {
       try {
         const { data, error } = await supabase.storage

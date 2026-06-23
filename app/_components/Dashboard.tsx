@@ -52,8 +52,10 @@ export default function Dashboard() {
     }
   }, [q, trash]);
 
-  // Debounced reload on search / tab change.
+  // Debounced reload on search / tab change. Show the skeleton immediately so stale rows
+  // aren't rendered under the new header/tab during the debounce+fetch window.
   useEffect(() => {
+    setLoading(true);
     const t = setTimeout(load, 200);
     return () => clearTimeout(t);
   }, [load]);

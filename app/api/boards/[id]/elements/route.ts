@@ -7,7 +7,15 @@ import { expectArray, assertVersion, isPlainObject } from "@/lib/validate";
 type Ctx = { params: Promise<{ id: string }> };
 
 function currentElements(row: { elements: unknown }): Record<string, unknown>[] {
-  return (Array.isArray(row.elements) ? row.elements : []) as Record<string, unknown>[];
+  // Keep only plain objects with a string id — a stored null/non-object element (from a
+  // PUT/import that doesn't deep-validate element contents) must not crash String(e.id).
+  return (Array.isArray(row.elements) ? row.elements : []).filter(
+    (e): e is Record<string, unknown> =>
+      typeof e === "object" &&
+      e !== null &&
+      !Array.isArray(e) &&
+      typeof (e as Record<string, unknown>).id === "string",
+  );
 }
 
 // POST /api/boards/[id]/elements — append elements (land on top, in given order).

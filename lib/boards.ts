@@ -275,14 +275,26 @@ export async function createBoard(input: CreateBoardInput): Promise<FullBoard> {
       row = data as BoardRow;
     } catch (e) {
       // Roll back the just-inserted row (and any uploaded objects) so a failed create
-      // persists nothing — the error returned to the client then matches reality.
-      await deleteBoardImages(row.id).catch(() => {});
-      await supabase.from("boards").delete().eq("id", row.id);
+      // persists nothing — the error returned to the client then matches reality. Swallow
+      // the rollback delete's own outcome so the ORIGINAL error always surfaces.
+      const rid = row.id; // capture (row is non-null here) for use inside the async closures
+      await deleteBoardImages(rid).catch(() => {});
+      await supabase
+        .from("boards")
+        .delete()
+        .eq("id", rid)
+        .then(
+          () => {},
+          (delErr) =>
+            console.error("[jandraw] createBoard rollback delete failed; orphaned row", rid, delErr),
+        );
       throw e;
     }
   }
 
-  return toFullBoard(row);
+  // toFullBoardSafe (not toFullBoard): the board is already committed, so a transient
+  // Storage read-back blip must degrade to reference-only files, not 500 the create.
+  return toFullBoardSafe(row);
 }
 
 // Rotate a board's share token (kills the old /v link). No snapshot, no version bump.
